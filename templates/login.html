@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login – Zyviora</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .auth-fullscreen {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0a0a;
+        }
+
+        .auth-bg-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.65;
+            filter: blur(8px) brightness(1.2);
+            z-index: 1;
+            transform: scale(1.05);
+            /* Prevents blur edges */
+        }
+
+        .auth-bg-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(106, 0, 255, 0.1) 0%, rgba(10, 10, 20, 0.8) 100%);
+            z-index: 2;
+        }
+
+        .auth-card-container {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 440px;
+            /* Login animation: slide up and fade */
+            animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(40px);
+        }
+
+        .premium-glass-card {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(35px);
+            -webkit-backdrop-filter: blur(35px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 30px;
+            padding: 3.5rem 3rem;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+            text-align: left;
+        }
+
+        @keyframes slideUpFade {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-fullscreen">
+        <img src="{{ url_for('static', filename='auth_side_image.png') }}" class="auth-bg-img" alt="Zyviora AI Visual">
+        <div class="auth-bg-overlay"></div>
+
+        <div class="auth-card-container">
+            <div class="premium-glass-card">
+                <div style="display:flex; justify-content:center; margin-bottom:10px;">
+                    <img src="{{ url_for('static', filename='logo_light.png') }}" alt="Zyviora Logo"
+                        style="width: 160px; height: auto; object-fit: contain; transform: scale(1.3);">
+                </div>
+                <h2
+                    style="text-align: center; margin-bottom: 25px; font-weight: 700; color: #1a1a2e; font-size: 1.8rem;">
+                    Welcome Back</h2>
+
+                <form id="loginForm">
+                    <label
+                        style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block; color: rgba(26, 26, 46, 0.8);">Username</label>
+                    <input id="username" type="text" class="clay-input" placeholder="Enter your username" required autocomplete="off"
+                        style="display:block; width: 100%; margin-bottom:20px; background: rgba(255,255,255,0.8);">
+
+                    <label
+                        style="font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; display: block; color: rgba(26, 26, 46, 0.8);">Password</label>
+                    <input id="password" type="password" class="clay-input" placeholder="Enter your password" required autocomplete="off"
+                        style="display:block; width: 100%; margin-bottom:30px; background: rgba(255,255,255,0.8);">
+
+                    <button type="submit" class="clay-btn primary"
+                        style="width:100%; font-size: 1.15rem; padding: 15px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px;">
+                        Login Securely
+                    </button>
+                </form>
+
+                <p id="error-msg"
+                    style="color:#d63031;margin-top:16px;font-size:0.95em;min-height:1em; text-align: center; font-weight: 500;">
+                </p>
+
+                <div
+                    style="margin-top: 25px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px; text-align: center;">
+                    <p style="font-size:0.95em;color: rgba(26, 26, 46, 0.7); margin-bottom: 12px;">
+                        New to Zyviora? <a href="/register"
+                            style="color:var(--primary-color);font-weight:800; text-decoration: none;">Create an
+                            Account</a>
+                    </p>
+                    <p style="font-size:0.9em;">
+                        <a href="/chat_ui"
+                            style="color:var(--primary-color); text-decoration: none; font-weight: 500;">Continue as
+                            Guest &rarr;</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Clear old session data to prevent incorrect names from showing
+        localStorage.clear();
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const errEl = document.getElementById('error-msg');
+            errEl.textContent = '';
+
+            // Add subtle pulse to button while loading
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Authenticating...';
+            btn.style.opacity = '0.8';
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    if (data.userData && data.userData !== '{}') {
+                        try {
+                            const parsed = JSON.parse(data.userData);
+                            for (const key in parsed) localStorage.setItem(key, parsed[key]);
+                        } catch (err) { }
+                    }
+                    localStorage.setItem('zyviora_logged_in', 'true');
+                    localStorage.setItem('zyviora_username', u);
+
+                    // Success animation
+                    document.querySelector('.auth-card-container').style.animation = 'slideUpFadeOut 0.5s forwards';
+                    setTimeout(() => { window.location.href = '/dashboard'; }, 400);
+                } else {
+                    errEl.textContent = data.message || 'Login failed.';
+                    btn.innerHTML = originalText;
+                    btn.style.opacity = '1';
+                }
+            } catch (err) {
+                errEl.textContent = 'Network error. Please try again.';
+                btn.innerHTML = originalText;
+                btn.style.opacity = '1';
+            }
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/cursor.js') }}?v=4"></script>
+</body>
+
+</html>

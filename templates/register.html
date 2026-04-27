@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register – Zyviora</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .auth-fullscreen {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            /* Register aligns right */
+            background: #0a0a0a;
+            padding-right: 8vw;
+            /* Space from the right edge */
+        }
+
+        .auth-bg-img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.65;
+            filter: blur(8px) brightness(1.2);
+            z-index: 1;
+            transform: scale(1.05) scaleX(-1);
+            /* Flip horizontally to look different from login */
+        }
+
+        .auth-bg-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to right, rgba(10, 10, 20, 0.4) 0%, rgba(106, 0, 255, 0.15) 50%, rgba(10, 10, 20, 0.9) 100%);
+            z-index: 2;
+        }
+
+        .auth-card-container {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 480px;
+            /* Register animation: slide from right */
+            animation: slideInRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateX(60px);
+        }
+
+        .premium-glass-card {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(35px);
+            -webkit-backdrop-filter: blur(35px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 30px;
+            padding: 3rem;
+            box-shadow: -20px 20px 60px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+            text-align: left;
+        }
+
+        @keyframes slideInRight {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Mobile adjustment */
+        @media (max-width: 900px) {
+            .auth-fullscreen {
+                justify-content: center;
+                padding-right: 0;
+                padding: 20px;
+            }
+
+            .auth-bg-overlay {
+                background: rgba(10, 10, 20, 0.7);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-fullscreen">
+        <img src="{{ url_for('static', filename='auth_side_image.png') }}" class="auth-bg-img" alt="Zyviora AI Visual">
+        <div class="auth-bg-overlay"></div>
+
+        <div class="auth-card-container">
+            <div class="premium-glass-card">
+                <div style="display:flex; justify-content:center; gap:20px; align-items:center; margin-bottom:15px;">
+                    <img src="{{ url_for('static', filename='logo_light.png') }}" alt="Zyviora Logo"
+                        style="width: 140px; height: auto; object-fit: contain; transform: scale(1.3);">
+                </div>
+                <h2
+                    style="text-align: center; margin-bottom: 20px; font-weight: 700; color: #1a1a2e; font-size: 1.6rem;">
+                    Join Zyviora</h2>
+
+                <form id="registerForm">
+                    <div style="display: flex; gap: 15px;">
+                        <div style="flex: 1;">
+                            <label
+                                style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; display: block; color: rgba(26, 26, 46, 0.8);">Full
+                                Name</label>
+                            <input id="fullname" type="text" class="clay-input" placeholder="Name" required
+                                style="display:block; width: 100%; margin-bottom:12px; background: rgba(255,255,255,0.8); padding: 12px 15px;">
+                        </div>
+                        <div style="flex: 1;">
+                            <label
+                                style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; display: block; color: rgba(26, 26, 46, 0.8);">Username</label>
+                            <input id="username" type="text" class="clay-input" placeholder="Username" required
+                                style="display:block; width: 100%; margin-bottom:12px; background: rgba(255,255,255,0.8); padding: 12px 15px;">
+                        </div>
+                    </div>
+
+                    <label
+                        style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; display: block; color: rgba(26, 26, 46, 0.8);">Email
+                        Address</label>
+                    <input id="email" type="email" class="clay-input" placeholder="hello@zyviora.com" required
+                        style="display:block; width: 100%; margin-bottom:12px; background: rgba(255,255,255,0.8); padding: 12px 15px;">
+
+                    <label
+                        style="font-weight: 600; font-size: 0.85rem; margin-bottom: 6px; display: block; color: rgba(26, 26, 46, 0.8);">Password</label>
+                    <input id="password" type="password" class="clay-input" placeholder="Choose a secure password"
+                        required
+                        style="display:block; width: 100%; margin-bottom:24px; background: rgba(255,255,255,0.8); padding: 12px 15px;">
+
+                    <button type="submit" class="clay-btn primary"
+                        style="width:100%; font-size: 1.1rem; padding: 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px;">
+                        Create Account
+                    </button>
+                </form>
+
+                <p id="error-msg"
+                    style="color:#d63031;margin-top:12px;font-size:0.9em;min-height:1em; text-align: center; font-weight: 500;">
+                </p>
+                <p id="success-msg"
+                    style="color:#00b894;margin-top:4px;font-size:0.9em;min-height:1em; text-align: center; font-weight: 500;">
+                </p>
+
+                <div
+                    style="margin-top: 15px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 15px; text-align: center;">
+                    <p style="font-size:0.95em;color: rgba(26, 26, 46, 0.7);">
+                        Already a member? <a href="/login"
+                            style="color:var(--primary-color);font-weight:800; text-decoration: none;">Login Here</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fn = document.getElementById('fullname').value;
+            const em = document.getElementById('email').value;
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const errEl = document.getElementById('error-msg');
+            const sucEl = document.getElementById('success-msg');
+            errEl.textContent = ''; sucEl.textContent = '';
+
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Creating...';
+            btn.style.opacity = '0.8';
+
+            try {
+                const res = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: u,
+                        password: p,
+                        fullname: fn,
+                        email: em
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    localStorage.setItem('zyviora_fullname', fn);
+
+                    sucEl.textContent = 'Welcome! Setting up your AI...';
+                    document.querySelector('.auth-card-container').style.animation = 'slideOutLeft 0.5s forwards';
+                    setTimeout(() => window.location.href = '/login', 1000);
+                } else {
+                    errEl.textContent = data.message || 'Registration failed.';
+                    btn.innerHTML = originalText;
+                    btn.style.opacity = '1';
+                }
+            } catch (err) {
+                errEl.textContent = 'Network error. Please try again.';
+                btn.innerHTML = originalText;
+                btn.style.opacity = '1';
+            }
+        });
+    </script>
+    <style>
+        @keyframes slideOutLeft {
+            to {
+                opacity: 0;
+                transform: translateX(-60px);
+            }
+        }
+
+        @keyframes slideUpFadeOut {
+            to {
+                opacity: 0;
+                transform: translateY(-40px);
+            }
+        }
+    </style>
+    <script src="{{ url_for('static', filename='js/cursor.js') }}?v=4"></script>
+</body>
+
+</html>

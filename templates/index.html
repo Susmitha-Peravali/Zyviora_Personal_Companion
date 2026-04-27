@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zyviora – Your Intelligent AI Companion</title>
+    <meta name="description"
+        content="Zyviora is your intelligent AI companion for productivity, emotional support, and goal tracking.">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+</head>
+
+<body>
+
+    <!-- Ambient background blobs -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <!-- ══════════ NAVBAR ══════════ -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-container">
+            <a class="brand" href="/" style="display: flex; align-items: center;">
+                <img src="{{ url_for('static', filename='logo_light.png') }}" class="logo-img" alt="Zyviora Logo"
+                    style="height: 150px; width: auto; object-fit: contain;">
+            </a>
+
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#hero">Home</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#how">How It Works</a></li>
+            </ul>
+
+            <div class="nav-actions">
+                <a href="/login" class="btn btn-ghost-nav">Login</a>
+                <a href="/chat_ui" class="btn btn-primary">Get Started</a>
+            </div>
+
+            <button class="burger" id="burger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ══════════ HERO ══════════ -->
+    <section class="hero" id="hero">
+
+        <!-- Left: copy -->
+        <div class="hero-copy">
+            <div class="badge">
+                <span class="material-icons-round">auto_awesome</span>
+                AI-Powered Companion
+            </div>
+
+            <h1>Your Intelligent<br>
+                Companion for<br>
+                <span class="hl">Productivity</span> &amp;<br>
+                <span class="hl pink">Emotional Well-being</span>
+            </h1>
+
+            <p class="hero-desc">
+                Elevate your focus, manage stress, and achieve goals with Zyviora —
+                your personalised AI friend, always by your side.
+            </p>
+
+            <div class="hero-btns">
+                <a href="/chat_ui" class="btn btn-primary btn-lg">
+                    <span class="material-icons-round">chat_bubble_outline</span>
+                    Start Your Journey
+                </a>
+                <a href="#features" class="btn btn-outline-hero">
+                    Explore Features
+                    <span class="material-icons-round">keyboard_arrow_down</span>
+                </a>
+            </div>
+
+            <div class="trust-pills">
+                <span class="pill">⚡ Zero Latency AI</span>
+                <span class="pill">🔒 Private &amp; Secure</span>
+                <span class="pill">☁️ Gemini Powered</span>
+            </div>
+        </div>
+
+        <!-- Right: 3D Robot (background removed) -->
+        <div class="hero-visual">
+            <div class="robot-stage">
+                <div class="ring ring-1"></div>
+                <div class="ring ring-2"></div>
+
+                <div class="robot-bubble">
+                    <img id="robotImg" src="{{ url_for('static', filename='robot_clean.png') }}"
+                        alt="Zyviora AI Companion Robot" class="robot-img">
+                </div>
+
+                <div class="chip chip-1">
+                    <span class="material-icons-round" style="font-size:14px;color:#7c3aed;">favorite</span>
+                    How are you today?
+                </div>
+                <div class="chip chip-2">
+                    <span class="material-icons-round" style="font-size:14px;color:#059669;">check_circle</span>
+                    Goal added! 🎯
+                </div>
+                <div class="chip chip-3">
+                    <span class="material-icons-round" style="font-size:14px;color:#0ea5e9;">alarm</span>
+                    Reminder set ⏰
+                </div>
+
+                <div class="dot d1"></div>
+                <div class="dot d2"></div>
+                <div class="dot d3"></div>
+                <div class="dot d4"></div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ══════════ FEATURES ══════════ -->
+    <section class="features" id="features">
+        <div class="section-intro">
+            <span class="eyebrow">What I Can Do</span>
+            <h2>Everything You Need,<br>In One Companion</h2>
+            <p class="section-sub">Built to make your day a little easier and a lot more meaningful.</p>
+        </div>
+
+        <div class="feat-grid">
+            <div class="feat-card" style="--i:0">
+                <div class="feat-icon-wrap" style="--c1:#ff9ecd;--c2:#e11d78">
+                    <span class="material-icons-round">favorite</span>
+                </div>
+                <h3>Emotional Support</h3>
+                <p>Guided check-ins, mindfulness techniques, and mood tracking so you're never alone in your feelings.
+                </p>
+            </div>
+            <div class="feat-card" style="--i:1">
+                <div class="feat-icon-wrap" style="--c1:#93c5fd;--c2:#1d4ed8">
+                    <span class="material-icons-round">alarm</span>
+                </div>
+                <h3>Smart Reminders</h3>
+                <p>Task prompts and schedule optimisation — just say it naturally and Zyviora handles the rest.</p>
+            </div>
+            <div class="feat-card" style="--i:2">
+                <div class="feat-icon-wrap" style="--c1:#c4b5fd;--c2:#6d28d9">
+                    <span class="material-icons-round">track_changes</span>
+                </div>
+                <h3>Goal Tracking</h3>
+                <p>Set, monitor, and achieve personal milestones. Every win gets a celebration. 🎉</p>
+            </div>
+            <div class="feat-card" style="--i:3">
+                <div class="feat-icon-wrap" style="--c1:#6ee7b7;--c2:#047857">
+                    <span class="material-icons-round">forum</span>
+                </div>
+                <h3>AI Conversations</h3>
+                <p>Natural dialogue — local Prolog AI for speed, Gemini AI for depth and creativity.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ══════════ HOW IT WORKS ══════════ -->
+    <section class="how" id="how">
+        <div class="section-intro">
+            <span class="eyebrow">The Process</span>
+            <h2>Simple Steps to Your<br><span class="hl">Enhanced Wellbeing</span></h2>
+        </div>
+
+        <div class="steps-row">
+            <div class="step-card" style="--i:0">
+                <div class="step-num">01</div>
+                <div class="step-icon">
+                    <span class="material-icons-round">person_add</span>
+                </div>
+                <h3>Create Profile</h3>
+                <p>Set up your account so Zyviora can personalise every interaction for you.</p>
+            </div>
+
+            <div class="step-connector">
+                <div class="connector-line"></div>
+                <span class="material-icons-round connector-arrow">arrow_forward</span>
+            </div>
+
+            <div class="step-card" style="--i:1">
+                <div class="step-num">02</div>
+                <div class="step-icon">
+                    <span class="material-icons-round">smart_toy</span>
+                </div>
+                <h3>Interact Daily</h3>
+                <p>Chat, track goals, and share your mood. Zyviora learns and grows with you.</p>
+            </div>
+
+            <div class="step-connector">
+                <div class="connector-line"></div>
+                <span class="material-icons-round connector-arrow">arrow_forward</span>
+            </div>
+
+            <div class="step-card" style="--i:2">
+                <div class="step-num">03</div>
+                <div class="step-icon">
+                    <span class="material-icons-round">insights</span>
+                </div>
+                <h3>Grow Together</h3>
+                <p>View your dashboard, celebrate completed goals, and track your progress.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ══════════ FINAL CTA ══════════ -->
+    <section class="cta-section">
+        <div class="cta-card">
+            <div class="cta-emoji">🤖</div>
+            <h2>Ready to meet your AI companion?</h2>
+            <p>No account required to get started. Jump straight into the conversation.</p>
+            <a href="/chat_ui" class="btn btn-primary btn-lg">
+                <span class="material-icons-round">rocket_launch</span>
+                Launch Zyviora Now
+            </a>
+        </div>
+    </section>
+
+    <!-- ══════════ FOOTER ══════════ -->
+    <footer class="footer">
+        <span>© 2026 Zyviora · Hybrid AI Personal Companion</span>
+    </footer>
+
+    <script>
+        // Navbar scroll shadow
+        const nav = document.getElementById('navbar');
+        addEventListener('scroll', () => nav.classList.toggle('shadowed', scrollY > 30));
+
+        // Smooth anchor scroll
+        document.querySelectorAll('a[href^="#"]').forEach(a =>
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                document.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth' });
+            })
+        );
+
+        // Reveal cards on scroll
+        const io = new IntersectionObserver(entries => {
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    const delay = (e.target.style.getPropertyValue('--i') || 0) * 120;
+                    setTimeout(() => e.target.classList.add('visible'), delay);
+                }
+            });
+        }, { threshold: 0.12 });
+        document.querySelectorAll('.feat-card, .step-card').forEach(el => io.observe(el));
+
+        // Robot gentle float
+        const robotEl = document.querySelector('.robot-bubble');
+        if (robotEl) {
+            let t = 0;
+            (function float() {
+                t += 0.018;
+                robotEl.style.transform = `translateY(${Math.sin(t) * 10}px)`;
+                requestAnimationFrame(float);
+            })();
+        }
+
+        // Mobile burger menu
+        document.getElementById('burger')?.addEventListener('click', () => {
+            document.getElementById('navLinks').classList.toggle('open');
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/cursor.js') }}?version=2"></script>
+</body>
+
+</html>

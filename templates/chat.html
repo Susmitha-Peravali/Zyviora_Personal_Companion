@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zyviora - Chat</title>
+    <!-- CSS and Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-container premium-app-glass">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="brand"
+                style="display: flex; align-items: center; justify-content: center; width: 100%; padding: 15px 0; margin-bottom: 30px;">
+                <img src="{{ url_for('static', filename='logo_light.png') }}" alt="Zyviora Logo"
+                    style="height: 100px; width: auto; object-fit: contain; transform: scale(1.5); filter: invert(1) hue-rotate(180deg) brightness(0.8) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.05));">
+            </div>
+
+            <nav class="controls">
+                <button id="new-chat-btn" class="sidebar-btn" title="New Chat" style="margin-bottom:10px; background:rgba(106, 0, 255, 0.1); color:var(--primary-color); font-weight: 600;">
+                    <span class="material-icons">add</span>
+                    <span class="btn-text">New Chat</span>
+                </button>
+
+                <button id="toggle-history-btn" class="sidebar-btn" title="Chat History" style="margin-bottom:5px; background:rgba(0,0,0,0.02); justify-content: space-between; padding-right: 10px;">
+                    <div style="display:flex; align-items:center;">
+                        <span class="material-icons">history</span>
+                        <span class="btn-text">Chat History</span>
+                    </div>
+                    <span class="material-icons" id="history-chevron" style="font-size: 20px; transition: transform 0.2s;">expand_more</span>
+                </button>
+                
+                <div id="chat-history-list" style="max-height: 200px; overflow-y: auto; margin-bottom:10px; display:none; flex-direction:column; gap:5px; width:100%; padding-left: 5px;">
+                    <!-- Chat sessions injected here -->
+                </div>
+                <div class="separator"></div>
+
+                <a href="/dashboard" class="control-item">
+                    <span class="material-icons">dashboard</span> Dashboard
+                </a>
+
+                <button id="toggle-voice-btn" class="sidebar-btn" title="Toggle Voice Interaction">
+                    <span class="material-icons">mic</span>
+                    <span class="btn-text">Voice Mode</span>
+                </button>
+                <button id="open-games-btn" class="sidebar-btn" title="Play a Game">
+                    <span class="material-icons">sports_esports</span>
+                    <span class="btn-text">Play a Game</span>
+                </button>
+
+                <div class="separator"></div>
+
+                <a href="/login" class="control-item" id="login-link">
+                    <span class="material-icons">login</span> Login / Settings
+                </a>
+                <a href="/" class="control-item">
+                    <span class="material-icons">home</span> Back to Home
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-wrapper">
+            <header class="chat-header">
+                <button id="toggle-sidebar-btn" title="Toggle Sidebar"
+                    style="background: transparent; border: none; cursor: pointer; color: var(--primary-color); display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; margin-right: 15px; transition: all 0.2s;">
+                    <span class="material-icons">menu_open</span>
+                </button>
+                <div class="status-indicator" style="margin-right: 15px;">
+                    <div class="pulse-dot"></div>
+                    <span>Zyviora is Online</span>
+                </div>
+                <div id="current-chat-title" style="font-weight: 600; color: rgba(26, 26, 46, 0.8); font-size: 1.1rem; border-left: 2px solid rgba(0,0,0,0.1); padding-left: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">
+                    New Chat
+                </div>
+            </header>
+
+            <div class="chat-window" id="chat-window">
+                <!-- Messages injected here -->
+            </div>
+
+            <div class="input-container-wrapper">
+                <div class="floating-input-pill">
+                    <button id="mic-btn" class="icon-btn recording-hidden" title="Hold to Speak">
+                        <span class="material-icons">graphic_eq</span>
+                    </button>
+                    <input type="text" id="user-input" placeholder="Message Zyviora..." autocomplete="off" />
+                    <button id="send-btn" class="send-btn" title="Send Message">
+                        <span class="material-icons">arrow_upward</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor-glow" id="cursor-glow"></div>
+
+    <!-- Main JavaScript Files -->
+    <script src="{{ url_for('static', filename='js/games.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/cursor.js') }}?v=4"></script>
+</body>
+
+</html>

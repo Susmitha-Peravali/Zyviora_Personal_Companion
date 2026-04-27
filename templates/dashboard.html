@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard – Zyviora</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            align-items: flex-start;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container" style="width:100%;max-width:1200px;margin:0 auto;">
+
+        <!-- Top Nav -->
+        <div class="nav-links" style="margin-bottom:2rem;">
+            <a href="/chat_ui" class="clay-btn">
+                <span class="material-icons">arrow_back</span> Back to Chat
+            </a>
+            <div style="flex:1;"></div>
+            <span id="welcome-name"
+                style="font-family:'Poppins',sans-serif;font-weight:600;color:var(--primary-color);font-size:1.1rem;"></span>
+            <button id="logout-btn" class="clay-btn primary">
+                <span class="material-icons">logout</span> Logout
+            </button>
+        </div>
+
+        <h2 style="font-size:2rem;margin-bottom:4px;">Your Personal AI Dashboard</h2>
+        <p style="color:var(--text-secondary);margin-bottom:30px;">A snapshot of your journey with Zyviora</p>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>📅 Mood History (Last 7 Days)</h3>
+                <div class="chart-container">
+                    <canvas id="moodChart"></canvas>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <h3>🎯 Goals Overview</h3>
+                <div class="chart-container">
+                    <canvas id="goalsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <h3>🧠 Behavioral Insights</h3>
+                <p id="insight-text" style="color:var(--text-secondary);margin-bottom:10px;">Gathering your interaction
+                    patterns...</p>
+                <ul id="insight-list"
+                    style="padding-left:20px;line-height:2;color:var(--text-secondary);font-size:0.95rem;"></ul>
+            </div>
+
+            <div class="stat-card" id="task-card">
+                <h3>📝 Tasks Overview</h3>
+                <h4 style="margin-top: 10px; font-size: 0.9rem; color: var(--primary-color);">Pending</h4>
+                <ul id="task-list" style="padding-left:0;list-style:none;line-height:2;color:var(--text-secondary);font-size:0.95rem;max-height:120px;overflow-y:auto;">
+                    <li>No pending tasks!</li>
+                </ul>
+                <h4 style="margin-top: 15px; font-size: 0.9rem; color: #2ecc71;">Completed</h4>
+                <ul id="completed-task-list" style="padding-left:0;list-style:none;line-height:2;color:var(--text-secondary);font-size:0.95rem;max-height:120px;overflow-y:auto;">
+                    <li>No completed tasks.</li>
+                </ul>
+            </div>
+
+            <div class="stat-card" id="reminder-card">
+                <h3>⏰ Active Reminders</h3>
+                <ul id="reminder-list" style="padding-left:0;list-style:none;line-height:2;color:var(--text-secondary);font-size:0.95rem;max-height:200px;overflow-y:auto;">
+                    <li>No active reminders.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/games.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/cursor.js') }}?v=4"></script>
+</body>
+
+</html>

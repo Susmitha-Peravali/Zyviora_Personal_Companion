@@ -1,0 +1,32 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+.env/
+
+# Environment Variables
+.env
+
+# Database
+*.db
+*.sqlite3
+instance/
+
+# Flask session
+flask_session/
+
+# Antigravity/Agentic Coding Metadata
+.gemini/
+scratch/
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# Presentation Files
+*.pptx
+*.ppt
