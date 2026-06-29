@@ -19,7 +19,8 @@ if GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE":
     genai.configure(api_key=GEMINI_API_KEY)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'zyviora-super-secret-key'
+# app.config['SECRET_KEY'] = 'zyviora-super-secret-key'
+app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -50,7 +51,8 @@ with app.app_context():
 
 # --- Prolog Setup ---
 prolog = Prolog()
-base_dir = os.path.dirname(os.path.abspath(__name__))
+# base_dir = os.path.dirname(os.path.abspath(__name__))
+base_dir = os.path.dirname(os.path.abspath(__file__))
 prolog_main_path = os.path.join(base_dir, "prolog", "main.pl")
 
 try:

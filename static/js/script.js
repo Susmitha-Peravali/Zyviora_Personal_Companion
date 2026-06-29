@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const avatar = document.createElement('div');
             avatar.className = `avatar ${msg.sender}-avatar`;
             avatar.innerHTML = msg.sender === 'user' 
-                ? '<div style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; background:var(--primary-color); color:white; border-radius:50%;"><span class="material-icons" style="font-size:20px;">person</span></div>' 
+                ? '<img src="/static/user_avatar.png" alt="User" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />' 
                 : '<img src="/static/bot_avatar.png" alt="Zyviora" />';
             
             const bubble = document.createElement('div');
@@ -671,7 +671,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!text) return;
 
         appendMessage(text, 'user');
-        addMessageToHistory(text, 'user', false);  // Save user message to session history
         userInput.value = '';
         resetIdleTimer();
 
@@ -748,11 +747,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => {
             clearTimeout(timeoutId);
             console.error('Chat fetch error:', err);
+            let errMsg = "";
             if (err.name === 'AbortError') {
-                bubble.innerHTML = "It seems like I took too long to respond. My AI brain might be a bit slow right now — please try again! ⏱️";
+                errMsg = "It seems like I took too long to respond. My AI brain might be a bit slow right now — please try again! ⏱️";
             } else {
-                bubble.innerHTML = "I couldn't reach my brain right now. Please check your connection and try again! 💙";
+                errMsg = "I couldn't reach my brain right now. Please check your connection and try again! 💙";
             }
+            bubble.innerHTML = errMsg;
+            addMessageToHistory(errMsg, 'bot', true);
         })
         .finally(() => {
             userInput.disabled = false;
@@ -835,7 +837,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const avatar = document.createElement('div');
         avatar.className = `avatar ${sender}-avatar`;
         avatar.innerHTML = sender === 'user' 
-            ? '<div style="display:flex; align-items:center; justify-content:center; width:100%; height:100%; background:var(--primary-color); color:white; border-radius:50%;"><span class="material-icons" style="font-size:20px;">person</span></div>' 
+            ? '<img src="/static/user_avatar.png" alt="User" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />' 
             : '<img src="/static/bot_avatar.png" alt="Zyviora" />';
         
         const bubble = document.createElement('div');
