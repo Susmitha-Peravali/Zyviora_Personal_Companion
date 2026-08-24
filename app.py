@@ -7,6 +7,7 @@ from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from pyswip import Prolog
 from functools import wraps
+from datetime import datetime, timedelta, timezone
 import os
 import re
 import secrets
@@ -93,6 +94,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
     full_name = db.Column(db.String(120), nullable=True)
+    failed_login_attempts = db.Column(db.Integer, nullable=False, default=0)
+    locked_until = db.Column(db.DateTime, nullable=True)
     # Storing frontend data as JSON text for easy syncing
     data = db.Column(db.Text, default='{}')
 
@@ -108,7 +111,13 @@ with app.app_context():
         # /register still requires both for new signups.
         from sqlalchemy import inspect, text
         existing_columns = {c["name"] for c in inspect(db.engine).get_columns("user")}
-        for column_name, ddl_type in (("email", "VARCHAR(120)"), ("full_name", "VARCHAR(120)")):
+        missing_columns = (
+            ("email", "VARCHAR(120)"),
+            ("full_name", "VARCHAR(120)"),
+            ("failed_login_attempts", "INTEGER NOT NULL DEFAULT 0"),
+            ("locked_until", "TIMESTAMP"),
+        )
+        for column_name, ddl_type in missing_columns:
             if column_name not in existing_columns:
                 db.session.execute(text(f"ALTER TABLE user ADD COLUMN {column_name} {ddl_type}"))
         db.session.commit()
@@ -135,6 +144,27 @@ except Exception as e:
     print(f"Warning: Could not consult main.pl automatically. Ensure paths are correct. Error: {e}")
 
 # --- Helper Functions ---
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION = timedelta(minutes=15)
+
+
+def utcnow():
+    # datetime.utcnow() is deprecated; this stays naive (rather than
+    # timezone-aware) to match what SQLite/plain-TIMESTAMP columns actually
+    # round-trip, avoiding aware-vs-naive comparison errors on read-back.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def is_password_strong(password):
+    if not password or len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r'[A-Za-z]', password):
+        return False, "Password must contain at least one letter"
+    if not re.search(r'\d', password):
+        return False, "Password must contain at least one number"
+    return True, None
+
+
 def preprocess_text(text):
     """
     Cleans text before sending to Prolog.
@@ -181,7 +211,21 @@ def login():
         return render_template('login.html')
     data = request.get_json()
     user = User.query.filter_by(username=data.get('username')).first()
+
+    # Per-account lockout: the IP-based rate limit above only slows down a
+    # single attacker hammering one IP — it does nothing against a
+    # distributed attack aimed at one specific account.
+    if user and user.locked_until and user.locked_until > utcnow():
+        remaining_minutes = max(1, int((user.locked_until - utcnow()).total_seconds() // 60) + 1)
+        return jsonify({
+            'status': 'error',
+            'message': f'Too many failed attempts. Try again in {remaining_minutes} minute(s).'
+        }), 403
+
     if user and check_password_hash(user.password_hash, data.get('password')):
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        db.session.commit()
         session['user_id'] = user.id
         session['username'] = user.username
         session['chat_context'] = []
@@ -191,6 +235,13 @@ def login():
             'userData': user.data,
             'fullName': user.full_name,
         })
+
+    if user:
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+            user.locked_until = utcnow() + LOCKOUT_DURATION
+        db.session.commit()
+
     return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -206,6 +257,9 @@ def register():
 
     if not username or not password or not email or not full_name:
         return jsonify({'status': 'error', 'message': 'username, password, email, and fullname are all required'}), 400
+    password_ok, password_error = is_password_strong(password)
+    if not password_ok:
+        return jsonify({'status': 'error', 'message': password_error}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'status': 'error', 'message': 'User already exists'}), 400
     if User.query.filter_by(email=email).first():
