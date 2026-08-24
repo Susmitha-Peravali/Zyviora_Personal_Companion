@@ -126,3 +126,29 @@ def test_sync_requires_login(client):
     token = get_csrf_token(client, "/login")
     resp = post_json(client, "/sync", {"foo": "bar"}, token)
     assert resp.status_code == 401
+
+
+def test_sync_accepts_valid_payload(client, register_and_login):
+    _, token = register_and_login(username="jack")
+    resp = post_json(client, "/sync", {"zyviora_goals": "[]", "zyviora_tasks": "[]"}, token)
+    assert resp.status_code == 200
+
+
+def test_sync_rejects_non_object_payload(client, register_and_login):
+    _, token = register_and_login(username="kate")
+    resp = client.post("/sync", data="[1, 2, 3]", content_type="application/json",
+                        headers={"X-CSRFToken": token})
+    assert resp.status_code == 400
+
+
+def test_sync_rejects_oversized_payload(client, register_and_login):
+    _, token = register_and_login(username="liam")
+    huge_payload = {"blob": "x" * (300 * 1024)}  # over the 256KB cap
+    resp = post_json(client, "/sync", huge_payload, token)
+    assert resp.status_code == 413
+
+
+def test_privacy_page_loads(client):
+    resp = client.get("/privacy")
+    assert resp.status_code == 200
+    assert b"Privacy Policy" in resp.data

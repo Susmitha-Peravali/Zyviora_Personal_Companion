@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy – Zyviora</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            align-items: flex-start;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .policy-container {
+            width: 100%;
+            max-width: 760px;
+            margin: 0 auto;
+        }
+
+        .policy-container h1 {
+            font-size: 2rem;
+            margin-bottom: 4px;
+        }
+
+        .policy-container h2 {
+            font-size: 1.2rem;
+            margin-top: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .policy-container p,
+        .policy-container li {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .policy-container .updated {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="policy-container">
+        <a href="/" class="clay-btn" style="display:inline-flex; margin-bottom: 1.5rem;">
+            <span class="material-icons">arrow_back</span> Back to Home
+        </a>
+
+        <h1>Privacy Policy</h1>
+        <p class="updated">Zyviora is a personal/portfolio project, not a commercial product or a licensed
+            healthcare service. This page explains, plainly, what it does with your data.</p>
+
+        <h2>What's collected</h2>
+        <ul>
+            <li><strong>Account info:</strong> username, email, and full name you provide at signup, plus your
+                password — stored only as a one-way hash, never in plain text.</li>
+            <li><strong>Chat messages:</strong> what you type in the chat window.</li>
+            <li><strong>Mood, goals, tasks, and reminders:</strong> stored in your browser's local storage on your
+                own device, and optionally synced to the server when you log out so they're there next time you log
+                in from that account.</li>
+        </ul>
+
+        <h2>How your messages are handled</h2>
+        <p>Most messages are matched against a fixed set of local rules (greetings, emotional support, productivity
+            tips, and similar) and never leave the server. When a message doesn't match any of those rules, it —
+            along with a short window of recent conversation for context — is sent to Google's Gemini API to
+            generate a reply. That means some of what you type is processed by Google under
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's own privacy
+                policy</a>, which is outside this project's control.</p>
+
+        <h2>Not medical care</h2>
+        <p>Zyviora offers supportive, conversational responses — it is not therapy, not a crisis service, and not a
+            substitute for professional mental health care. If a message contains crisis language, the app shows
+            real crisis-line resources (like 988 in the US) alongside its own response, but it cannot reach out to
+            anyone on your behalf.</p>
+
+        <h2>What isn't done with your data</h2>
+        <p>Nothing here is sold, shared with advertisers, or used to build an ad profile. There's no analytics or
+            tracking pixel on this app beyond what's described above.</p>
+
+        <h2>Your control over it</h2>
+        <p>Mood, goals, tasks, and reminders live in your browser's local storage — clearing your browser's site
+            data for this app removes them from that device. To have your account and its server-side data deleted
+            entirely, contact whoever is operating this instance of the app.</p>
+
+        <h2>Changes</h2>
+        <p>Since this is a small, evolving project, this policy may change as features change. Check back here if
+            you want the current version.</p>
+    </div>
+</body>
+
+</html>

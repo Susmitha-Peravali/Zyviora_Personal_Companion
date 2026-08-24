@@ -854,6 +854,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Boot on load
     bootZyviora();
 
+    // Periodically sync localStorage state (goals, tasks, reminders, mood,
+    // memory) to the server. Previously this only happened once, on logout
+    // — so a crashed tab, a closed browser, or a session that never reaches
+    // logout lost everything since the last successful sync. This narrows
+    // that window without changing where the data actually lives.
+    function syncLocalDataToServer() {
+        if (localStorage.getItem('zyviora_logged_in') !== 'true') return;
+        const localData = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            localData[key] = localStorage.getItem(key);
+        }
+        fetch('/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify(localData)
+        }).catch(e => console.warn('Periodic sync failed:', e));
+    }
+    setInterval(syncLocalDataToServer, 2 * 60 * 1000);
+
     function appendMessage(text, sender, skipHistory = false) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${sender}-message`;

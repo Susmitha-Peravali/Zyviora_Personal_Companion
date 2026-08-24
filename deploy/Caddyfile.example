@@ -1,0 +1,26 @@
+# Reference reverse-proxy config for a real public deployment.
+#
+# This app has no public deployment target configured (see README) — this
+# file is a starting point for when you have a server with a domain pointed
+# at it. It is NOT wired into docker-compose.yml automatically: Caddy needs a
+# real, publicly resolvable domain to request a Let's Encrypt certificate for,
+# which isn't available in local/dev use.
+#
+# Usage once you have a domain and a server:
+#   1. Point the domain's DNS A/AAAA record at your server.
+#   2. Copy this file to Caddyfile (drop the .example) and replace
+#      zyviora.example.com below with your real domain.
+#   3. Run Caddy in front of the app, e.g. by adding a `caddy` service to
+#      docker-compose.yml (image: caddy:2-alpine, ports 80/443, this file
+#      mounted at /etc/caddy/Caddyfile, and a volume for its data/config so
+#      certificates persist across restarts) on the same docker network as
+#      the `web` service.
+#   4. Set BEHIND_PROXY=true and SESSION_COOKIE_SECURE=true in .env — see
+#      .env.example for why both matter.
+#
+# Caddy handles the Let's Encrypt certificate issuance and renewal
+# automatically; there's no manual certbot/cron step.
+
+zyviora.example.com {
+    reverse_proxy web:5000
+}
