@@ -1,16 +1,24 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from pyswip import Prolog
+from functools import wraps
 import os
 import re
+import secrets
 import subprocess
 import webbrowser
 import google.generativeai as genai
 from dotenv import load_dotenv
+
+try:
+    import redis as redis_lib
+except ImportError:
+    redis_lib = None
 
 # Load environment variables
 load_dotenv()
@@ -18,25 +26,65 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE":
     genai.configure(api_key=GEMINI_API_KEY)
 
+FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+
 app = Flask(__name__)
-# app.config['SECRET_KEY'] = 'zyviora-super-secret-key'
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key")
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    print("WARNING: SECRET_KEY not set in environment — using a random ephemeral key. "
+          "Sessions/CSRF tokens will not survive a restart. Set SECRET_KEY in .env for production.")
+app.config['SECRET_KEY'] = SECRET_KEY
+
+# DATABASE_URL lets you point at Postgres (or anything SQLAlchemy supports) in
+# a real deployment; unset, it falls back to the local SQLite file used today.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///database.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Session setup
-app.config['SESSION_TYPE'] = 'filesystem'
+# Session setup — REDIS_URL switches from per-container filesystem sessions
+# (broken once you run more than one worker/replica) to shared Redis sessions.
+REDIS_URL = os.getenv('REDIS_URL')
+if REDIS_URL and redis_lib:
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_REDIS'] = redis_lib.from_url(REDIS_URL)
+else:
+    app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
-# Limit setup
+# CSRF protection for all state-changing requests
+csrf = CSRFProtect(app)
+
+# Limit setup — same REDIS_URL gives rate limits a shared store across
+# workers/replicas instead of each process counting in its own memory.
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    storage_uri=REDIS_URL if REDIS_URL else "memory://"
 )
 
 db = SQLAlchemy(app)
+
+
+def login_required(view):
+    """Guards HTML page routes that require an authenticated session."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def api_login_required(view):
+    """Guards JSON API routes: returns 401 instead of redirecting."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
+        return view(*args, **kwargs)
+    return wrapped
 
 # --- Database Models ---
 class User(db.Model):
@@ -47,7 +95,16 @@ class User(db.Model):
     data = db.Column(db.Text, default='{}')
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as e:
+        # Multiple Gunicorn workers/replicas can race to create the schema on
+        # first boot against a shared DB; a losing IntegrityError here is
+        # benign as long as another worker won the race. Gunicorn's --preload
+        # flag avoids the race within a single container (schema is created
+        # once in the master before forking workers); this catch is a
+        # fallback for multi-container/replica deployments.
+        print(f"db.create_all() warning (likely a benign create-table race): {e}")
 
 # --- Prolog Setup ---
 prolog = Prolog()
@@ -98,10 +155,12 @@ def chat_ui():
     return render_template('chat.html')
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     return render_template('dashboard.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if request.method == 'GET':
         return render_template('login.html')
@@ -115,6 +174,7 @@ def login():
     return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def register():
     if request.method == 'GET':
         return render_template('register.html')
@@ -140,11 +200,9 @@ def logout():
     return jsonify({'status': 'success'})
 
 @app.route('/sync', methods=['POST'])
+@api_login_required
 def sync_data():
     """Sync frontend local data to backend"""
-    if 'user_id' not in session:
-        return jsonify({'status': 'error', 'message': 'Not logged in'}), 401
-    
     data = request.get_json()
     user = db.session.get(User, session['user_id'])
     if user:
@@ -164,7 +222,14 @@ def chat():
     
     raw_message = data.get('message', '').strip()
     safe_message = preprocess_text(raw_message).replace("'", "\\'")
-    
+
+    # Belt-and-suspenders guard: preprocess_text() already strips everything but
+    # word characters/whitespace, but we assert it explicitly right before this
+    # string is interpolated into a Prolog query, so the query is never built
+    # from unvalidated input even if preprocessing changes later.
+    if not re.fullmatch(r"[\w\s]*", safe_message):
+        return jsonify({'error': 'Invalid characters in message'}), 400
+
     # Init context history if missing
     if 'chat_context' not in session:
         session['chat_context'] = []
@@ -230,7 +295,14 @@ def chat():
     return jsonify({'response': response_text})
 
 @app.route('/open-app', methods=['POST'])
+@api_login_required
+@limiter.limit("10 per minute")
 def open_app():
+    """Launches a desktop app on the SERVER's machine. Only makes sense for a
+    single-user local install (e.g. this container run on your own PC) — on a
+    real multi-tenant deployment this opens apps on the host, not the caller's
+    device. Login-gated to keep it from being a public unauthenticated
+    process-launcher; still not safe to expose to untrusted multi-tenant users."""
     data = request.get_json()
     if not data or 'app_name' not in data:
         return jsonify({'status': 'error', 'message': 'No app_name provided'}), 400
@@ -258,4 +330,4 @@ def open_app():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=False, use_reloader=False)
+    app.run(debug=FLASK_DEBUG, host='0.0.0.0', port=5000, threaded=False, use_reloader=False)

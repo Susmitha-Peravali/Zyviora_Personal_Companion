@@ -1,3 +1,5 @@
+const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content;
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- Elements ---
     const chatWindow = document.getElementById('chat-window');
@@ -491,6 +493,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 "I hear you, and I'm so glad you shared that with me. 💙 What you're feeling is real, and it matters. " +
                 "Please don't carry this alone — I'm right here. Would you like to talk about what's going on?"
             );
+            appendBotMessageTracked(
+                "If things ever feel like too much to handle alone, please also consider reaching out to people trained to help, any time day or night:\n" +
+                "• US: call or text 988 (Suicide & Crisis Lifeline)\n" +
+                "• US/Canada: text HOME to 741741 (Crisis Text Line)\n" +
+                "• Outside the US: findahelpline.com lists free, confidential helplines by country\n" +
+                "You deserve support, and I'm still here too."
+            );
             return true; // Suppress backend — response is handled here
         }
         return false;
@@ -582,12 +591,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             fetch('/open-app', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                 body: JSON.stringify({ app_name: appName })
             })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status !== 'success') {
+            .then(res => res.json().then(data => ({ ok: res.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok && data.message === 'Not logged in') {
+                    appendBotMessageTracked("Opening apps on this device needs you to be logged in first — head to /login and try again 🔒");
+                } else if (data.status !== 'success') {
                     appendBotMessageTracked("Hmm, I couldn't open that. Try again?");
                 }
             })
@@ -718,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         fetch('/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
             body: JSON.stringify({ message: enrichedMessage }),
             signal: controller.signal
         })
