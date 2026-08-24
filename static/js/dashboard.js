@@ -1,3 +1,5 @@
+const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content;
+
 document.addEventListener('DOMContentLoaded', () => {
     // ─── Auth Guard ───────────────────────────────
     if (!localStorage.getItem('zyviora_logged_in')) {
@@ -28,12 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await fetch('/sync', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                 body: JSON.stringify(localData)
             });
         } catch (e) { console.warn('Sync before logout failed:', e); }
 
-        await fetch('/logout', { method: 'POST' });
+        await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': CSRF_TOKEN } });
         localStorage.removeItem('zyviora_logged_in');
         localStorage.removeItem('zyviora_username');
         window.location.href = '/login';
