@@ -8,6 +8,7 @@ from flask_wtf.csrf import CSRFProtect
 from pyswip import Prolog
 from functools import wraps
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 import re
 import secrets
@@ -23,6 +24,13 @@ except ImportError:
 
 # Load environment variables
 load_dotenv()
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("zyviora")
+
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE":
     genai.configure(api_key=GEMINI_API_KEY)
@@ -34,14 +42,33 @@ app = Flask(__name__)
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_hex(32)
-    print("WARNING: SECRET_KEY not set in environment — using a random ephemeral key. "
-          "Sessions/CSRF tokens will not survive a restart. Set SECRET_KEY in .env for production.")
+    logger.warning("SECRET_KEY not set in environment — using a random ephemeral key. "
+                    "Sessions/CSRF tokens will not survive a restart. Set SECRET_KEY in .env for production.")
 app.config['SECRET_KEY'] = SECRET_KEY
 
 # DATABASE_URL lets you point at Postgres (or anything SQLAlchemy supports) in
 # a real deployment; unset, it falls back to the local SQLite file used today.
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///database.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# BEHIND_PROXY: set this when a reverse proxy (Caddy/nginx/Traefik — see
+# deploy/Caddyfile.example) terminates TLS in front of this app. Without it,
+# Flask sees the proxy's own IP/scheme on every request instead of the real
+# client's, which breaks IP-based rate limiting and makes the app think every
+# request arrived over plain HTTP even when the proxy served it over HTTPS.
+BEHIND_PROXY = os.getenv("BEHIND_PROXY", "false").lower() == "true"
+if BEHIND_PROXY:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# Only enable once TLS is actually terminated in front of the app (i.e. once
+# BEHIND_PROXY is true and the proxy is serving HTTPS) — a Secure cookie is
+# never sent back by the browser over plain HTTP, which would silently break
+# every login on a plain local/docker-compose setup like the one used to
+# develop and test this app so far.
+app.config['SESSION_COOKIE_SECURE'] = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
 
 # Session setup — REDIS_URL switches from per-container filesystem sessions
 # (broken once you run more than one worker/replica) to shared Redis sessions.
@@ -102,33 +129,50 @@ class User(db.Model):
 with app.app_context():
     try:
         db.create_all()
-
-        # db.create_all() only creates missing tables — it never alters an
-        # existing one, so adding a column to this model does nothing for a
-        # database that already has a "user" table from before. Add any
-        # missing columns by hand so existing accounts survive. Columns stay
-        # nullable so old rows (which predate email/full_name) don't break;
-        # /register still requires both for new signups.
-        from sqlalchemy import inspect, text
-        existing_columns = {c["name"] for c in inspect(db.engine).get_columns("user")}
-        missing_columns = (
-            ("email", "VARCHAR(120)"),
-            ("full_name", "VARCHAR(120)"),
-            ("failed_login_attempts", "INTEGER NOT NULL DEFAULT 0"),
-            ("locked_until", "TIMESTAMP"),
-        )
-        for column_name, ddl_type in missing_columns:
-            if column_name not in existing_columns:
-                db.session.execute(text(f"ALTER TABLE user ADD COLUMN {column_name} {ddl_type}"))
-        db.session.commit()
     except Exception as e:
         # Multiple Gunicorn workers/replicas can race to create the schema on
         # first boot against a shared DB; a losing IntegrityError here is
         # benign as long as another worker won the race. Gunicorn's --preload
         # flag avoids the race within a single container (schema is created
-        # once in the master before forking workers); this catch is a
-        # fallback for multi-container/replica deployments.
-        print(f"db.create_all() warning (likely a benign create-table race): {e}")
+        # once in the master before forking workers); this is a fallback for
+        # multi-container/replica deployments.
+        logger.warning("db.create_all() warning (likely a benign create-table race): %s", e)
+
+    # db.create_all() only creates missing tables — it never alters an
+    # existing one, so adding a column to this model does nothing for a
+    # database that already has a "user" table from before. Add any missing
+    # columns by hand so existing accounts survive. Columns stay nullable so
+    # old rows (which predate email/full_name) don't break; /register still
+    # requires both for new signups.
+    #
+    # "user" is quoted throughout — it's a reserved word in PostgreSQL, and an
+    # unquoted ALTER TABLE user ... fails there with a syntax error.
+    from sqlalchemy import inspect, text
+    existing_columns = {c["name"] for c in inspect(db.engine).get_columns("user")}
+    missing_columns = (
+        ("email", "VARCHAR(120)"),
+        ("full_name", "VARCHAR(120)"),
+        ("failed_login_attempts", "INTEGER NOT NULL DEFAULT 0"),
+        ("locked_until", "TIMESTAMP"),
+    )
+    for column_name, ddl_type in missing_columns:
+        if column_name in existing_columns:
+            continue
+        try:
+            db.session.execute(text(f'ALTER TABLE "user" ADD COLUMN {column_name} {ddl_type}'))
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            # A losing race against another worker adding the same column
+            # concurrently is genuinely benign; anything else (bad DDL syntax,
+            # permissions, a typo) is a real migration failure and must not be
+            # swallowed silently, or the app keeps running against a schema
+            # that doesn't match its models.
+            if column_name in {c["name"] for c in inspect(db.engine).get_columns("user")}:
+                logger.info("Column %s already present (likely a concurrent-worker race): %s", column_name, e)
+            else:
+                logger.error('Failed to add column %s to "user": %s', column_name, e)
+                raise
 
 # --- Prolog Setup ---
 prolog = Prolog()
@@ -139,9 +183,9 @@ prolog_main_path = os.path.join(base_dir, "prolog", "main.pl")
 try:
     prolog_file_str = prolog_main_path.replace("\\", "/")
     prolog.consult(prolog_file_str)
-    print(f"Successfully consulted {prolog_file_str}")
+    logger.info("Successfully consulted %s", prolog_file_str)
 except Exception as e:
-    print(f"Warning: Could not consult main.pl automatically. Ensure paths are correct. Error: {e}")
+    logger.error("Could not consult main.pl automatically. Ensure paths are correct. Error: %s", e)
 
 # --- Helper Functions ---
 MAX_FAILED_LOGIN_ATTEMPTS = 5
@@ -195,6 +239,10 @@ def preprocess_text(text):
 def home():
     return render_template('index.html')
 
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
 @app.route('/chat_ui')
 def chat_ui():
     return render_template('chat.html')
@@ -229,6 +277,7 @@ def login():
         session['user_id'] = user.id
         session['username'] = user.username
         session['chat_context'] = []
+        logger.info("Login success: user_id=%s", user.id)
         return jsonify({
             'status': 'success',
             'message': 'Logged in successfully',
@@ -240,7 +289,11 @@ def login():
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
             user.locked_until = utcnow() + LOCKOUT_DURATION
+            logger.warning("Account locked after repeated failed logins: user_id=%s", user.id)
         db.session.commit()
+        logger.info("Login failed (bad password): user_id=%s attempt=%d", user.id, user.failed_login_attempts)
+    else:
+        logger.info("Login failed (unknown username)")
 
     return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
@@ -273,6 +326,7 @@ def register():
     )
     db.session.add(new_user)
     db.session.commit()
+    logger.info("New registration: user_id=%s", new_user.id)
     return jsonify({'status': 'success', 'message': 'Registered successfully'})
 
 @app.route('/logout', methods=['POST'])
@@ -282,15 +336,25 @@ def logout():
     session.pop('chat_context', None)
     return jsonify({'status': 'success'})
 
+MAX_SYNC_PAYLOAD_BYTES = 256 * 1024  # generous for goals/tasks/reminders/mood history, not unbounded
+
+
 @app.route('/sync', methods=['POST'])
 @api_login_required
 def sync_data():
     """Sync frontend local data to backend"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'message': 'Expected a JSON object'}), 400
+
+    import json
+    serialized = json.dumps(data)
+    if len(serialized.encode('utf-8')) > MAX_SYNC_PAYLOAD_BYTES:
+        return jsonify({'status': 'error', 'message': 'Sync payload too large'}), 413
+
     user = db.session.get(User, session['user_id'])
     if user:
-        import json
-        user.data = json.dumps(data)
+        user.data = serialized
         db.session.commit()
         return jsonify({'status': 'success'})
     return jsonify({'status': 'error'}), 404
@@ -355,7 +419,7 @@ def chat():
                         )
                         response_text = llm_response.text if llm_response.text else "I'm here! Could you tell me more?"
                     except Exception as llm_error:
-                        print(f"Gemini API Error: {llm_error}")
+                        logger.error("Gemini API error: %s", llm_error)
                         response_text = "I'm still learning and don't quite know how to respond to that, but know I'm here for you! (API error)"
                 else:
                     response_text = "I don't have a rule for that yet! Please add a Gemini API key to .env for dynamic answers."
@@ -363,7 +427,7 @@ def chat():
             response_text = f"I heard you say: {raw_message}. (No pattern matched)"
             
     except Exception as e:
-        print(f"Prolog Query Error: {e}")
+        logger.error("Prolog query error: %s", e)
         response_text = "I'm having a little trouble thinking straight right now. (Logic engine error)"
         
     # Append to context
