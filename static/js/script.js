@@ -15,6 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Games button (sidebar)
     const openGamesBtn = document.getElementById('open-games-btn');
 
+    // State used by functions that can run during initial boot (e.g. the
+    // welcome message) or from an event listener fired before the rest of
+    // this script has finished its first pass — must be declared up front,
+    // not further down where they're conceptually grouped with the code
+    // that uses them, or those references throw a temporal-dead-zone
+    // ReferenceError and silently abort script execution.
+    let lastBotMessageTime = Date.now();
+    let idleTimer = null;
+    let checkInCount = 0;
+    let usedCheckInIndices = [];
+    let isUserTyping = false;
+    let typingTimeout = null;
+
     // =========================================================
     // MODULE 0: MEMORY SYSTEM (localStorage-persisted)
     // Stores: name, mood history, goals, past context
@@ -871,8 +884,6 @@ document.addEventListener('DOMContentLoaded', () => {
         speakText(text);
     }
 
-    // Track the timestamp of the last bot message to avoid spamming
-    let lastBotMessageTime = Date.now();
     function appendBotMessageTracked(text, skipHistory = false) {
         lastBotMessageTime = Date.now();
         appendBotMessage(text, skipHistory);
@@ -1045,12 +1056,6 @@ document.addEventListener('DOMContentLoaded', () => {
         "Just a gentle nudge — remember to take a short break and stretch if you've been sitting a while! 🌿",
         "I noticed you've been away. No worries, I'm right here whenever you want to talk or just hang out. ❤️"
     ];
-
-    let idleTimer = null;
-    let checkInCount = 0;
-    let usedCheckInIndices = [];
-    let isUserTyping = false;
-    let typingTimeout = null;
 
     /**
      * Pick a unique random check-in message (does NOT repeat until all are used).
