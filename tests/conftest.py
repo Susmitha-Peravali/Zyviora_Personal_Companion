@@ -20,6 +20,11 @@ import app as app_module  # noqa: E402  (must import after env vars are set)
 @pytest.fixture()
 def app():
     app_module.app.config.update(TESTING=True)
+    # Flask-Limiter's counters persist across the whole test process (same
+    # app, same in-memory store), so without a reset, tests trip real
+    # production rate limits (e.g. 10/minute on /register) purely from
+    # accumulating calls across unrelated tests.
+    app_module.limiter.reset()
     yield app_module.app
 
 
@@ -49,7 +54,12 @@ def register_and_login(client):
     """Registers and logs in a fresh user, returning (client, username)."""
     def _do(username="testuser", password="Testpass123!"):
         token = get_csrf_token(client, "/register")
-        resp = post_json(client, "/register", {"username": username, "password": password}, token)
+        resp = post_json(client, "/register", {
+            "username": username,
+            "password": password,
+            "email": f"{username}@example.com",
+            "fullname": username.capitalize(),
+        }, token)
         assert resp.status_code == 200, resp.get_data(as_text=True)
 
         token = get_csrf_token(client, "/login")

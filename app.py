@@ -91,12 +91,27 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    full_name = db.Column(db.String(120), nullable=True)
     # Storing frontend data as JSON text for easy syncing
     data = db.Column(db.Text, default='{}')
 
 with app.app_context():
     try:
         db.create_all()
+
+        # db.create_all() only creates missing tables — it never alters an
+        # existing one, so adding a column to this model does nothing for a
+        # database that already has a "user" table from before. Add any
+        # missing columns by hand so existing accounts survive. Columns stay
+        # nullable so old rows (which predate email/full_name) don't break;
+        # /register still requires both for new signups.
+        from sqlalchemy import inspect, text
+        existing_columns = {c["name"] for c in inspect(db.engine).get_columns("user")}
+        for column_name, ddl_type in (("email", "VARCHAR(120)"), ("full_name", "VARCHAR(120)")):
+            if column_name not in existing_columns:
+                db.session.execute(text(f"ALTER TABLE user ADD COLUMN {column_name} {ddl_type}"))
+        db.session.commit()
     except Exception as e:
         # Multiple Gunicorn workers/replicas can race to create the schema on
         # first boot against a shared DB; a losing IntegrityError here is
@@ -170,7 +185,12 @@ def login():
         session['user_id'] = user.id
         session['username'] = user.username
         session['chat_context'] = []
-        return jsonify({'status': 'success', 'message': 'Logged in successfully', 'userData': user.data})
+        return jsonify({
+            'status': 'success',
+            'message': 'Logged in successfully',
+            'userData': user.data,
+            'fullName': user.full_name,
+        })
     return jsonify({'status': 'error', 'message': 'Invalid credentials'}), 401
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -181,12 +201,21 @@ def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
+    email = data.get('email')
+    full_name = data.get('fullname')
+
+    if not username or not password or not email or not full_name:
+        return jsonify({'status': 'error', 'message': 'username, password, email, and fullname are all required'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'status': 'error', 'message': 'User already exists'}), 400
-    
+    if User.query.filter_by(email=email).first():
+        return jsonify({'status': 'error', 'message': 'An account with that email already exists'}), 400
+
     new_user = User(
         username=username,
-        password_hash=generate_password_hash(password)
+        password_hash=generate_password_hash(password),
+        email=email,
+        full_name=full_name
     )
     db.session.add(new_user)
     db.session.commit()
