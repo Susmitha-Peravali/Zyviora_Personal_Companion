@@ -168,6 +168,9 @@
                     }
                     localStorage.setItem('zyviora_logged_in', 'true');
                     localStorage.setItem('zyviora_username', u);
+                    if (data.fullName) {
+                        localStorage.setItem('zyviora_fullname', data.fullName);
+                    }
 
                     // Success animation
                     document.querySelector('.auth-card-container').style.animation = 'slideUpFadeOut 0.5s forwards';
