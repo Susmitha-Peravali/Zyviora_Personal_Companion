@@ -33,6 +33,53 @@ def test_register_requires_email_and_fullname(client):
     assert resp.status_code == 400
 
 
+def test_register_rejects_short_password(client):
+    token = get_csrf_token(client, "/register")
+    resp = post_json(client, "/register", {
+        "username": "shortpw", "password": "abc123", "email": "shortpw@example.com", "fullname": "Short",
+    }, token)
+    assert resp.status_code == 400
+
+
+def test_register_rejects_password_without_digit(client):
+    token = get_csrf_token(client, "/register")
+    resp = post_json(client, "/register", {
+        "username": "nodigit", "password": "abcdefgh", "email": "nodigit@example.com", "fullname": "NoDigit",
+    }, token)
+    assert resp.status_code == 400
+
+
+def test_login_locks_account_after_repeated_failures(client, register_and_login):
+    username, _ = register_and_login(username="henry")
+
+    for _ in range(5):
+        token = get_csrf_token(client, "/login")
+        resp = post_json(client, "/login", {"username": username, "password": "wrongpass1"}, token)
+        assert resp.status_code == 401
+
+    # Even the CORRECT password must now be rejected while locked out.
+    token = get_csrf_token(client, "/login")
+    resp = post_json(client, "/login", {"username": username, "password": "Testpass123!"}, token)
+    assert resp.status_code == 403
+    assert "Too many failed attempts" in resp.get_json()["message"]
+
+
+def test_successful_login_resets_failed_attempts(client, register_and_login):
+    import app as app_module
+    username, _ = register_and_login(username="iris")
+
+    token = get_csrf_token(client, "/login")
+    post_json(client, "/login", {"username": username, "password": "wrong"}, token)
+
+    token = get_csrf_token(client, "/login")
+    resp = post_json(client, "/login", {"username": username, "password": "Testpass123!"}, token)
+    assert resp.status_code == 200
+
+    with app_module.app.app_context():
+        user = app_module.User.query.filter_by(username=username).first()
+        assert user.failed_login_attempts == 0
+
+
 def test_login_returns_stored_full_name(client, register_and_login):
     username, token = register_and_login(username="grace")
     resp = post_json(client, "/login", {"username": username, "password": "Testpass123!"}, token)
