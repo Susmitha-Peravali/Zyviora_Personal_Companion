@@ -235,7 +235,19 @@ def preprocess_text(text):
 
 # --- Routes ---
 
+@app.route('/healthz')
+@limiter.exempt
+def healthz():
+    """Lightweight liveness endpoint for load balancers/orchestrators
+    (Render, etc). Deliberately exempt from rate limiting — a health checker
+    polling every few seconds would otherwise trip the global default_limits
+    and get 429'd, which is exactly what happened when default_limits was
+    first added: Render's own health check against '/' got rate-limited,
+    repeatedly cycling the instance as "unhealthy"."""
+    return jsonify({'status': 'ok'})
+
 @app.route('/')
+@limiter.exempt
 def home():
     return render_template('index.html')
 
