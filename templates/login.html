@@ -175,6 +175,7 @@
                     if (data.fullName) {
                         localStorage.setItem('zyviora_fullname', data.fullName);
                     }
+                    localStorage.setItem('zyviora_email_verified', data.emailVerified ? 'true' : 'false');
 
                     // Success animation
                     document.querySelector('.auth-card-container').style.animation = 'slideUpFadeOut 0.5s forwards';

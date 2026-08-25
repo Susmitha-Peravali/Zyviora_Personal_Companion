@@ -19,6 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeEl = document.getElementById('welcome-name');
     if (welcomeEl) welcomeEl.textContent = `👋 Hi, ${displayName}!`;
 
+    // ─── Email verification reminder (soft — never blocks account use) ───
+    const verifyBanner = document.getElementById('verify-email-banner');
+    if (verifyBanner && localStorage.getItem('zyviora_email_verified') === 'false') {
+        verifyBanner.style.display = 'block';
+    }
+
     // ─── Logout ───────────────────────────────────
     document.getElementById('logout-btn').addEventListener('click', async () => {
         // Sync localStorage data to backend before logging out

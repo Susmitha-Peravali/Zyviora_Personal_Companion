@@ -141,6 +141,9 @@ class User(db.Model):
     # so a database dump alone can't hand out a usable reset link.
     reset_token_hash = db.Column(db.String(64), nullable=True)
     reset_token_expires = db.Column(db.DateTime, nullable=True)
+    email_verified = db.Column(db.Boolean, nullable=False, default=False)
+    email_verify_token_hash = db.Column(db.String(64), nullable=True)
+    email_verify_token_expires = db.Column(db.DateTime, nullable=True)
     # Storing frontend data as JSON text for easy syncing
     data = db.Column(db.Text, default='{}')
 
@@ -174,6 +177,15 @@ with app.app_context():
         ("locked_until", "TIMESTAMP"),
         ("reset_token_hash", "VARCHAR(64)"),
         ("reset_token_expires", "TIMESTAMP"),
+        # Existing accounts predate email verification entirely and never had
+        # a reason to complete it — grandfathered in as verified so this
+        # doesn't retroactively nag people who already have working
+        # accounts. New registrations still start unverified: the ORM's
+        # Python-side default=False on the model column takes precedence
+        # over this DDL default for rows the ORM itself inserts.
+        ("email_verified", "BOOLEAN NOT NULL DEFAULT TRUE"),
+        ("email_verify_token_hash", "VARCHAR(64)"),
+        ("email_verify_token_expires", "TIMESTAMP"),
     )
     for column_name, ddl_type in missing_columns:
         if column_name in existing_columns:
@@ -211,6 +223,7 @@ except Exception as e:
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
 RESET_TOKEN_EXPIRY = timedelta(hours=1)
+EMAIL_VERIFY_TOKEN_EXPIRY = timedelta(hours=24)
 
 
 def utcnow():
@@ -218,6 +231,31 @@ def utcnow():
     # timezone-aware) to match what SQLite/plain-TIMESTAMP columns actually
     # round-trip, avoiding aware-vs-naive comparison errors on read-back.
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def generate_hashed_token(user, hash_attr, expires_attr, expiry):
+    """Generate a random token, store only its SHA-256 hash plus an expiry
+    on the given user attributes, and return the raw token — the caller is
+    responsible for emailing it and committing the session. Shared between
+    password-reset and email-verification, which are otherwise identical
+    "prove you control this inbox" mechanics."""
+    raw_token = secrets.token_urlsafe(32)
+    setattr(user, hash_attr, hashlib.sha256(raw_token.encode()).hexdigest())
+    setattr(user, expires_attr, utcnow() + expiry)
+    return raw_token
+
+
+def find_user_by_hashed_token(hash_attr, expires_attr, raw_token):
+    """Look up a user by a raw token against the stored hash, returning None
+    if there's no match or the token has expired."""
+    if not raw_token:
+        return None
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    user = User.query.filter_by(**{hash_attr: token_hash}).first()
+    expires = getattr(user, expires_attr, None) if user else None
+    if not user or not expires or expires < utcnow():
+        return None
+    return user
 
 
 def is_password_strong(password):
@@ -344,6 +382,7 @@ def login():
             'message': 'Logged in successfully',
             'userData': user.data,
             'fullName': user.full_name,
+            'emailVerified': user.email_verified,
         })
 
     if user:
@@ -386,9 +425,43 @@ def register():
         full_name=full_name
     )
     db.session.add(new_user)
+    db.session.flush()  # assigns new_user.id without committing yet
+
+    verify_token = generate_hashed_token(
+        new_user, 'email_verify_token_hash', 'email_verify_token_expires', EMAIL_VERIFY_TOKEN_EXPIRY
+    )
     db.session.commit()
     logger.info("New registration: user_id=%s", new_user.id)
+
+    verify_link = url_for('verify_email', token=verify_token, _external=True)
+    send_email(
+        new_user.email,
+        "Verify your Zyviora email",
+        f"Hi {new_user.full_name},\n\n"
+        "Welcome to Zyviora! Please confirm this is your email address by clicking the "
+        "link below. It expires in 24 hours.\n\n"
+        f"{verify_link}\n\n"
+        "You can still use your account before verifying — this just confirms we can "
+        "reach you if you ever need to reset your password."
+    )
+
     return jsonify({'status': 'success', 'message': 'Registered successfully'})
+
+@app.route('/verify-email')
+@limiter.limit("20 per hour")
+def verify_email():
+    token = request.args.get('token', '')
+    user = find_user_by_hashed_token('email_verify_token_hash', 'email_verify_token_expires', token)
+    if not user:
+        return render_template('verify_email.html', success=False)
+
+    user.email_verified = True
+    user.email_verify_token_hash = None
+    user.email_verify_token_expires = None
+    db.session.commit()
+    logger.info("Email verified: user_id=%s", user.id)
+
+    return render_template('verify_email.html', success=True)
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 @limiter.limit("5 per hour", methods=["POST"])
@@ -405,9 +478,7 @@ def forgot_password():
     # endpoint can't be used to enumerate which emails have accounts here.
     user = User.query.filter_by(email=email).first()
     if user:
-        raw_token = secrets.token_urlsafe(32)
-        user.reset_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        user.reset_token_expires = utcnow() + RESET_TOKEN_EXPIRY
+        raw_token = generate_hashed_token(user, 'reset_token_hash', 'reset_token_expires', RESET_TOKEN_EXPIRY)
         db.session.commit()
 
         reset_link = url_for('reset_password', token=raw_token, _external=True)
@@ -444,9 +515,8 @@ def reset_password():
     if not password_ok:
         return jsonify({'status': 'error', 'message': password_error}), 400
 
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    user = User.query.filter_by(reset_token_hash=token_hash).first()
-    if not user or not user.reset_token_expires or user.reset_token_expires < utcnow():
+    user = find_user_by_hashed_token('reset_token_hash', 'reset_token_expires', token)
+    if not user:
         return jsonify({'status': 'error', 'message': 'This reset link is invalid or has expired'}), 400
 
     user.password_hash = generate_password_hash(new_password)
