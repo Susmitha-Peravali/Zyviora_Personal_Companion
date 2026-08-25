@@ -8,12 +8,15 @@ from flask_wtf.csrf import CSRFProtect
 from pyswip import Prolog
 from functools import wraps
 from datetime import datetime, timedelta, timezone
+import hashlib
 import logging
 import os
 import re
 import secrets
+import smtplib
 import subprocess
 import webbrowser
+from email.message import EmailMessage
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -34,6 +37,17 @@ logger = logging.getLogger("zyviora")
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE":
     genai.configure(api_key=GEMINI_API_KEY)
+
+# SMTP is deliberately generic (not tied to one vendor's SDK) — point it at
+# a Gmail app password, SendGrid/Mailgun/Brevo's SMTP relay, or any other
+# provider's SMTP credentials. Left unset, password-reset emails are logged
+# instead of sent (see send_email below), so the flow is fully testable
+# without real credentials configured yet.
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER or "noreply@zyviora.local")
 
 FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 
@@ -123,6 +137,10 @@ class User(db.Model):
     full_name = db.Column(db.String(120), nullable=True)
     failed_login_attempts = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
+    # SHA-256 hash of the active password-reset token, not the raw token —
+    # so a database dump alone can't hand out a usable reset link.
+    reset_token_hash = db.Column(db.String(64), nullable=True)
+    reset_token_expires = db.Column(db.DateTime, nullable=True)
     # Storing frontend data as JSON text for easy syncing
     data = db.Column(db.Text, default='{}')
 
@@ -154,6 +172,8 @@ with app.app_context():
         ("full_name", "VARCHAR(120)"),
         ("failed_login_attempts", "INTEGER NOT NULL DEFAULT 0"),
         ("locked_until", "TIMESTAMP"),
+        ("reset_token_hash", "VARCHAR(64)"),
+        ("reset_token_expires", "TIMESTAMP"),
     )
     for column_name, ddl_type in missing_columns:
         if column_name in existing_columns:
@@ -190,6 +210,7 @@ except Exception as e:
 # --- Helper Functions ---
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = timedelta(minutes=15)
+RESET_TOKEN_EXPIRY = timedelta(hours=1)
 
 
 def utcnow():
@@ -207,6 +228,34 @@ def is_password_strong(password):
     if not re.search(r'\d', password):
         return False, "Password must contain at least one number"
     return True, None
+
+
+def send_email(to_address, subject, body):
+    """Send a plain-text email via SMTP, or log it if SMTP isn't configured.
+
+    The logging fallback is deliberate, not a stopgap: it makes the whole
+    password-reset flow testable end-to-end (including the actual reset
+    link) before any real email provider is wired in, and it means a typo'd
+    SMTP config fails loud in the logs rather than silently losing emails.
+    """
+    if not SMTP_HOST:
+        logger.warning(
+            "SMTP not configured — logging email instead of sending.\nTo: %s\nSubject: %s\n%s",
+            to_address, subject, body,
+        )
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_address
+    msg.set_content(body)
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        server.starttls()
+        if SMTP_USER and SMTP_PASSWORD:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
 
 
 def preprocess_text(text):
@@ -340,6 +389,77 @@ def register():
     db.session.commit()
     logger.info("New registration: user_id=%s", new_user.id)
     return jsonify({'status': 'success', 'message': 'Registered successfully'})
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per hour", methods=["POST"])
+def forgot_password():
+    if request.method == 'GET':
+        return render_template('forgot_password.html')
+
+    data = request.get_json()
+    email = data.get('email') if data else None
+    if not email:
+        return jsonify({'status': 'error', 'message': 'Email is required'}), 400
+
+    # Same response whether or not the email matches an account, so this
+    # endpoint can't be used to enumerate which emails have accounts here.
+    user = User.query.filter_by(email=email).first()
+    if user:
+        raw_token = secrets.token_urlsafe(32)
+        user.reset_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        user.reset_token_expires = utcnow() + RESET_TOKEN_EXPIRY
+        db.session.commit()
+
+        reset_link = url_for('reset_password', token=raw_token, _external=True)
+        send_email(
+            user.email,
+            "Reset your Zyviora password",
+            f"Hi {user.full_name or user.username},\n\n"
+            "Someone (hopefully you) requested a password reset for your Zyviora account.\n"
+            "Click the link below to set a new password. It expires in 1 hour and can only "
+            "be used once.\n\n"
+            f"{reset_link}\n\n"
+            "If you didn't request this, you can safely ignore this email."
+        )
+        logger.info("Password reset requested: user_id=%s", user.id)
+
+    return jsonify({
+        'status': 'success',
+        'message': "If an account with that email exists, we've sent a password reset link."
+    })
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+@limiter.limit("10 per hour", methods=["POST"])
+def reset_password():
+    if request.method == 'GET':
+        return render_template('reset_password.html', token=request.args.get('token', ''))
+
+    data = request.get_json()
+    token = data.get('token')
+    new_password = data.get('password')
+    if not token or not new_password:
+        return jsonify({'status': 'error', 'message': 'Token and new password are required'}), 400
+
+    password_ok, password_error = is_password_strong(new_password)
+    if not password_ok:
+        return jsonify({'status': 'error', 'message': password_error}), 400
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    user = User.query.filter_by(reset_token_hash=token_hash).first()
+    if not user or not user.reset_token_expires or user.reset_token_expires < utcnow():
+        return jsonify({'status': 'error', 'message': 'This reset link is invalid or has expired'}), 400
+
+    user.password_hash = generate_password_hash(new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires = None
+    # A successful reset is a legitimate account holder acting — don't leave
+    # them locked out from whatever failed attempts happened before this.
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.session.commit()
+    logger.info("Password reset completed: user_id=%s", user.id)
+
+    return jsonify({'status': 'success', 'message': 'Your password has been reset. You can now log in.'})
 
 @app.route('/logout', methods=['POST'])
 def logout():
