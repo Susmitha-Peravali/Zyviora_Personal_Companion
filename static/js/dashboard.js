@@ -43,10 +43,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderMoodChart();
     renderGoalsChart();
+    renderGoalsList();
     populateLearningInsights();
     renderTasksSummary();
     renderRemindersSummary();
 });
+
+function renderGoalsList() {
+    const goalList = document.getElementById('goal-list');
+    const completedList = document.getElementById('completed-goal-list');
+    if (!goalList || !completedList) return;
+
+    try {
+        const goals = JSON.parse(localStorage.getItem('zyviora_goals')) || [];
+        const today = new Date().toDateString();
+        const pending = goals.filter(g => !(g.completedToday || g.lastCompleted === today));
+        const completed = goals.filter(g => g.completedToday || g.lastCompleted === today);
+
+        goalList.innerHTML = pending.length === 0
+            ? '<li>No pending goals!</li>'
+            : pending.map(g => `<li>🎯 ${g.text}</li>`).join('');
+
+        completedList.innerHTML = completed.length === 0
+            ? '<li>No goals completed today.</li>'
+            : completed.map(g => `<li style="text-decoration:line-through;opacity:0.7;">✅ ${g.text}</li>`).join('');
+    } catch (e) {
+        console.error('Error rendering goals list:', e);
+    }
+}
 
 function renderMoodChart() {
     let rawMoods = localStorage.getItem('zyviora_mood_log');
@@ -110,7 +134,7 @@ function renderGoalsChart() {
     new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: isEmpty ? ['No Tasks'] : ['Completed ✅', 'Pending ⏳'],
+            labels: isEmpty ? ['No Goals'] : ['Completed ✅', 'Pending ⏳'],
             datasets: [{
                 data: isEmpty ? [1] : [completed, pending],
                 backgroundColor: isEmpty ? ['#e0e0e0'] : ['#6e8efb', '#fd79a8'],
