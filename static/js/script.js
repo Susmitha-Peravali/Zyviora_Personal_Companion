@@ -1313,14 +1313,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (toggleSidebarBtn && sidebar) {
         toggleSidebarBtn.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
-            
-            // Swap icon
+
+            // .collapsed means "shrunk to icon rail" on desktop but "open
+            // as an off-canvas drawer" on mobile (see the 768px media
+            // query) — so which icon reads as "sidebar is open" flips too.
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            const sidebarVisuallyOpen = isMobile ? isCollapsed : !isCollapsed;
+
             const icon = toggleSidebarBtn.querySelector('.material-icons');
-            if (sidebar.classList.contains('collapsed')) {
-                icon.textContent = 'menu';
-            } else {
-                icon.textContent = 'menu_open';
-            }
+            icon.textContent = sidebarVisuallyOpen ? 'menu_open' : 'menu';
         });
     }
 
