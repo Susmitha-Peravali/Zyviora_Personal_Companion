@@ -722,7 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const botMsgDiv = document.createElement('div');
         botMsgDiv.className = 'message bot-message';
         const avatar = document.createElement('div');
-        avatar.className = 'avatar bot-avatar';
+        avatar.className = 'avatar bot-avatar thinking';
         avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
         const bubble = document.createElement('div');
         bubble.className = 'bubble glass-panel';
@@ -781,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addMessageToHistory(errMsg, 'bot', true);
         })
         .finally(() => {
+            avatar.classList.remove('thinking');
             userInput.disabled = false;
             sendBtn.disabled = false;
             userInput.placeholder = isVoiceModeActive ? "Click the mic icon to speak, or type..." : "Talk to Zyviora...";
@@ -848,6 +849,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 list.style.display = 'none';
                 chevron.style.transform = 'rotate(0deg)';
             }
+        });
+    }
+
+    // ─── Login/Logout sidebar link ─────────────────────────
+    // This was always a static "Login / Settings" link to /login regardless
+    // of auth state — a logged-in user saw "Login" (confusing, they already
+    // are) and had no way to actually log out from the chat page itself;
+    // the only working logout button lived on the dashboard page.
+    const loginLink = document.getElementById('login-link');
+    if (loginLink && localStorage.getItem('zyviora_logged_in') === 'true') {
+        const icon = loginLink.querySelector('.material-icons');
+        if (icon) icon.textContent = 'logout';
+        loginLink.lastChild.textContent = ' Logout';
+        loginLink.removeAttribute('href');
+        loginLink.style.cursor = 'pointer';
+        loginLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            // Same sync-then-logout sequence as the dashboard's logout
+            // button, so state isn't lost by logging out from chat instead.
+            const localData = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                localData[key] = localStorage.getItem(key);
+            }
+            try {
+                await fetch('/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                    body: JSON.stringify(localData)
+                });
+            } catch (err) { console.warn('Sync before logout failed:', err); }
+
+            await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': CSRF_TOKEN } });
+            localStorage.removeItem('zyviora_logged_in');
+            localStorage.removeItem('zyviora_username');
+            window.location.href = '/login';
         });
     }
 

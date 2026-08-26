@@ -589,6 +589,57 @@ a {
 .bot-avatar {
     background: var(--primary-gradient);
     box-shadow: 0 8px 20px rgba(106, 0, 255, 0.3);
+    /* A calm, always-on "alive" presence rather than a static icon —
+       slow enough to read as breathing, not as an alert. */
+    animation: avatarBreathe 3.6s ease-in-out infinite;
+}
+
+@keyframes avatarBreathe {
+
+    0%,
+    100% {
+        /* second layer is a solid-edged glow ring via spread-radius (no
+           blur) — reads clearly at small avatar sizes, unlike a soft blur
+           alone, and (like all box-shadow) isn't clipped by the avatar's
+           own overflow:hidden the way a ::after ring would be. */
+        box-shadow: 0 8px 20px rgba(106, 0, 255, 0.3), 0 0 0 0 rgba(106, 0, 255, 0.35);
+        transform: scale(1);
+    }
+
+    50% {
+        box-shadow: 0 8px 30px rgba(106, 0, 255, 0.6), 0 0 0 5px rgba(106, 0, 255, 0.22);
+        transform: scale(1.08);
+    }
+}
+
+/* While actually waiting on a reply, the calm breathing gives way to a
+   brighter, quicker pulse — a subtle "processing" cue rather than a
+   literal HUD ring, layered on top of the same avatar rather than
+   introducing new UI. */
+.bot-avatar.thinking {
+    animation: avatarThinking 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .bot-avatar,
+    .bot-avatar.thinking {
+        animation: none;
+    }
+}
+
+@keyframes avatarThinking {
+
+    0%,
+    100% {
+        box-shadow: 0 8px 20px rgba(106, 0, 255, 0.35), 0 0 0 0 rgba(106, 0, 255, 0.6);
+        transform: scale(1);
+    }
+
+    50% {
+        box-shadow: 0 8px 30px rgba(106, 0, 255, 0.7), 0 0 0 9px rgba(106, 0, 255, 0);
+        transform: scale(1.1);
+    }
 }
 
 .user-avatar {
