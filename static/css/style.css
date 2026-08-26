@@ -837,6 +837,12 @@ padding: 0;
     border-radius: 24px;
     padding: 1.5rem;
     box-shadow: var(--clay-shadow-out);
+    /* Grid items default to min-width:auto, which respects their content's
+       intrinsic minimum size — a Chart.js <canvas> sets a real width
+       attribute (not just CSS), so on a narrow single-column mobile grid
+       the canvas's own width plus this card's padding forced the whole
+       card wider than its assigned track instead of the reverse. */
+    min-width: 0;
 }
 
 .chart-container {
@@ -849,6 +855,37 @@ padding: 0;
     display: flex;
     gap: 1rem;
     align-items: center;
+}
+
+@media (max-width: 600px) {
+
+    /* This row (Back to Chat / greeting / Logout) never wrapped and had no
+       mobile handling at all — on a narrow screen its un-shrinkable
+       children (buttons, greeting text) add up to more than the viewport
+       width, pushing Logout off the right edge entirely and wrapping the
+       button labels into cramped multi-line text. Stacking it removes the
+       fixed-width constraint that caused the overflow in the first place. */
+    .dashboard-container {
+        padding: 1rem;
+    }
+
+    .nav-links {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+
+    .nav-links .nav-spacer {
+        display: none;
+    }
+
+    .nav-links #welcome-name {
+        text-align: center;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* =========================================================

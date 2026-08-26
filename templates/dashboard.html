@@ -15,6 +15,12 @@
             padding: 2rem;
             min-height: 100vh;
         }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 1rem;
+            }
+        }
     </style>
 </head>
 
@@ -26,7 +32,7 @@
             <a href="/chat_ui" class="clay-btn">
                 <span class="material-icons">arrow_back</span> Back to Chat
             </a>
-            <div style="flex:1;"></div>
+            <div class="nav-spacer" style="flex:1;"></div>
             <span id="welcome-name"
                 style="font-family:'Poppins',sans-serif;font-weight:600;color:var(--primary-color);font-size:1.1rem;"></span>
             <button id="logout-btn" class="clay-btn primary">

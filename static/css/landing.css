@@ -36,6 +36,11 @@
 /* ── Body / background ── */
 html {
     scroll-behavior: smooth;
+    /* .blob below is position:fixed, which an ancestor's overflow-x:hidden
+       does not clip (fixed elements sit outside normal document flow) —
+       browsers only reliably suppress the resulting horizontal scrollbar
+       when overflow-x is set on <html> itself, not just <body>. */
+    overflow-x: hidden;
 }
 
 body {
@@ -998,6 +1003,16 @@ body {
     }
 
     .nav-container {
-        padding: 0 20px;
+        /* This padding was added without shrinking anything else, so the
+           same content that fit exactly at 0 padding now needed 40px more
+           room than it had — the burger button was rendering fully
+           off-screen as a result, not just close to the edge. */
+        padding: 0 12px;
+        gap: 10px;
+    }
+
+    .nav-actions .btn-primary {
+        padding: 10px 16px;
+        font-size: 0.85rem;
     }
 }
