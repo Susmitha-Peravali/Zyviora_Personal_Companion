@@ -68,9 +68,23 @@
             -webkit-backdrop-filter: blur(35px);
             border: 1px solid rgba(255, 255, 255, 0.8);
             border-radius: 30px;
-            padding: 3rem;
+            padding: clamp(1.75rem, 7vw, 3rem);
             box-shadow: -20px 20px 60px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
             text-align: left;
+        }
+
+        /* The right-aligned card (padding-right: 8vw, no left padding) reads
+           as an intentional asymmetric layout against the hero image on a
+           wide screen — on a phone there's no room for that asymmetry and
+           it just slams the card against the left edge with zero breathing
+           room while the right still has a gap. Below tablet width this
+           reverts to the same centered, evenly-padded layout login uses. */
+        @media (max-width: 900px) {
+            .auth-fullscreen {
+                justify-content: center;
+                padding: 20px;
+                box-sizing: border-box;
+            }
         }
 
         @keyframes slideInRight {

@@ -239,7 +239,7 @@ a {
     justify-content: center;
     align-items: center;
     background: var(--bg-gradient);
-    padding: 2rem;
+    padding: clamp(1rem, 5vw, 2rem);
     max-width: 650px;
     position: relative;
     z-index: 2;
@@ -250,7 +250,7 @@ a {
     background: rgba(255, 255, 255, 0.55);
     backdrop-filter: blur(25px);
     border: 1px solid rgba(255, 255, 255, 0.7);
-    padding: 3rem;
+    padding: clamp(1.5rem, 6vw, 3rem);
     border-radius: 28px;
     width: 100%;
     text-align: left;
@@ -283,10 +283,6 @@ a {
     .auth-content {
         max-width: 100%;
         box-shadow: none;
-    }
-
-    .auth-card {
-        padding: 2rem;
     }
 }
 
@@ -472,7 +468,7 @@ a {
 
 .chat-header {
     height: 80px;
-    padding: 0 40px;
+    padding: 0 clamp(16px, 4vw, 40px);
     display: flex;
     align-items: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.3);
@@ -487,11 +483,12 @@ a {
     font-weight: 600;
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.6);
-    padding: 12px 28px;
+    padding: 12px clamp(14px, 3vw, 28px);
     border-radius: 30px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-    font-size: 16px;
+    font-size: clamp(13px, 2.5vw, 16px);
     letter-spacing: 0.5px;
+    flex-shrink: 0;
 }
 
 .pulse-dot {
@@ -522,11 +519,11 @@ a {
 
 .chat-window {
     flex-grow: 1;
-    padding: 40px;
+    padding: clamp(16px, 4vw, 40px);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: clamp(16px, 3vw, 28px);
     scroll-behavior: smooth;
 }
 
@@ -546,8 +543,8 @@ a {
 
 .message {
     display: flex;
-    gap: 16px;
-    max-width: 85%;
+    gap: clamp(10px, 2vw, 16px);
+    max-width: min(85%, 720px);
     animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     opacity: 0;
     transform: translateY(20px);
@@ -570,8 +567,8 @@ a {
 }
 
 .avatar {
-    width: 44px;
-    height: 44px;
+    width: clamp(34px, 8vw, 44px);
+    height: clamp(34px, 8vw, 44px);
     border-radius: 50%;
     display: flex;
     justify-content: center;
@@ -648,7 +645,7 @@ a {
 }
 
 .bubble {
-    padding: 18px 24px;
+    padding: clamp(12px, 3vw, 18px) clamp(14px, 4vw, 24px);
     border-radius: 24px;
     line-height: 1.6;
     font-size: 15px;
@@ -674,7 +671,7 @@ a {
 
 /* Floating Input Area */
 .input-container-wrapper {
-    padding: 0 40px 30px 40px;
+    padding: 0 clamp(16px, 4vw, 40px) clamp(16px, 3vw, 30px);
 }
 
 .floating-input-pill {
@@ -846,7 +843,7 @@ padding: 0;
 }
 
 .chart-container {
-    height: 300px;
+    height: clamp(220px, 45vw, 300px);
     margin-top: 1rem;
 }
 
@@ -1037,6 +1034,36 @@ padding: 0;
         height: 100vh;
     }
 
+    /* On desktop the chat window is a floating glass card with margin
+       around it (96% width, rounded 35px corners) — on a phone screen
+       that margin/radius just wastes width and reads as a webpage with an
+       app inside it rather than the full-bleed native-app feel every
+       reference point (ChatGPT included) uses below tablet width. */
+    .premium-app-glass {
+        width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-width: none;
+        border-radius: 0;
+    }
+
+    .chat-header {
+        height: 64px;
+    }
+
+    /* The header is a single non-wrapping flex row (toggle button + status
+       pill + chat title) with no room to spare on a narrow phone — the
+       "Zyviora is Online" label is the one piece that's decorative rather
+       than functional, so it's what gives way first. */
+    .status-indicator span {
+        display: none;
+    }
+
+    .status-indicator {
+        padding: 10px;
+        gap: 0;
+    }
+
     /* On desktop .sidebar is visible by default and .collapsed shrinks it to
        an icon rail. Below 768px there's no room for a side-by-side sidebar
        at all — the sidebar's own content (logo, nav, chat history) is
@@ -1196,6 +1223,18 @@ padding: 0;
     .sidebar.collapsed .material-icons {
         margin: 0;
         /* Remove icon gaps */
+    }
+}
+
+/* Tablet band: a fixed 290px sidebar (fine on a full desktop monitor)
+   starts crowding the actual chat content on a ~800-1024px tablet — same
+   proportions issue ChatGPT's own UI avoids by narrowing its sidebar
+   before it disappears entirely, rather than jumping straight from "wide"
+   to "gone". */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .sidebar:not(.collapsed) {
+        width: 240px;
+        padding: 30px 16px;
     }
 }
 
