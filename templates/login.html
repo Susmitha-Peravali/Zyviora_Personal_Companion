@@ -13,14 +13,45 @@
         html {
             margin: 0;
             padding: 0;
-            height: 100%;
-            overflow: hidden;
+            /* .auth-bg-img below is deliberately scaled 5% larger than its
+               box to hide blur edge artifacts, bleeding past the visible
+               area by design — harmless as long as SOMETHING clips it.
+               <html>, not <body>, is the actual page-level scrolling/clip
+               box in most browsers, so overflow-x:hidden on body alone
+               doesn't stop that bleed from becoming a real horizontal
+               scrollbar on the page (the same lesson landing.css's
+               position:fixed blobs already taught this codebase once). */
+            overflow-x: hidden;
+        }
+
+        body {
+            /* A hard height:100% + overflow:hidden here relied on 100vh's
+               classic "toolbar hidden" sizing matching the real visible
+               area on mobile — when the browser's own toolbar is actually
+               showing, that assumption breaks and the bottom of the card
+               (submit button, footer links) can end up clipped below the
+               fold with literally no way to scroll to it. min-height keeps
+               the page at least full-screen without forcibly clipping it,
+               and overflow-y:auto is the safety net if content ever runs
+               taller than the visible area for any reason. */
+            min-height: 100vh;
+            min-height: 100svh;
+            overflow-y: auto;
         }
 
         .auth-fullscreen {
             position: relative;
-            width: 100vw;
+            width: 100%;
+            /* Fixed (not min-) height on purpose: .auth-bg-img below is
+               position:absolute with height:100%, which needs this
+               container to have a definite height to resolve against — a
+               min-height wouldn't count. If the card content ever needs
+               more room than this allows, default overflow:visible lets it
+               spill rather than clip, and body's overflow-y:auto (below)
+               makes that spillover reachable by scrolling instead of
+               invisible. */
             height: 100vh;
+            height: 100svh;
             display: flex;
             align-items: center;
             justify-content: center;

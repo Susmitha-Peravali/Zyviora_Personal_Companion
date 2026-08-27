@@ -13,8 +13,23 @@
         body {
             margin: 0;
             padding: 0;
+            /* Mobile browsers show/hide a toolbar that changes how much of
+               the screen is actually visible — 100vh traditionally sizes to
+               the LARGEST possible viewport (toolbar hidden), so when the
+               toolbar is actually showing, a body pinned to that larger
+               100vh can extend past the real visible area. Combined with
+               overflow:hidden below, anything pushed past the fold (like
+               the input bar) became genuinely unreachable — no scroll could
+               reveal it. 100svh guarantees the smallest, always-visible
+               height instead, and the "auto" overflow is a safety net: if
+               any future content ever runs taller than expected, the page
+               scrolls to it instead of clipping it out of reach.
+               (100vh stays first as the fallback for older browsers that
+               don't support svh at all.) */
             height: 100vh;
-            overflow: hidden;
+            height: 100svh;
+            overflow-y: auto;
+            overflow-x: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
