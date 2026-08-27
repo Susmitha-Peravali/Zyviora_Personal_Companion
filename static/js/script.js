@@ -15,6 +15,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Games button (sidebar)
     const openGamesBtn = document.getElementById('open-games-btn');
 
+    // Sidebar drawer elements — referenced from startNewChat/switchSession
+    // below (called during initial boot) as well as from the toggle button's
+    // own click handler further down, so this has to live up here rather
+    // than next to that handler or the early callers hit the same
+    // temporal-dead-zone trap documented right below.
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const sidebar = document.getElementById('sidebar');
+
+    // .collapsed means "shrunk to icon rail" on desktop but "open as an
+    // off-canvas drawer" on mobile (see the 768px media query). Selecting
+    // something from that drawer (a new chat, a game, a history entry)
+    // used to leave it sitting open on top of the very content it just
+    // revealed — on mobile that's not just visual clutter, the drawer's
+    // fixed z-index physically covers the chat window, so newly-rendered
+    // buttons (e.g. the game picker) were literally unclickable until the
+    // user manually closed it again.
+    function closeMobileSidebarDrawer() {
+        if (!sidebar || !toggleSidebarBtn) return;
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (isMobile && sidebar.classList.contains('collapsed')) {
+            sidebar.classList.remove('collapsed');
+            const icon = toggleSidebarBtn.querySelector('.material-icons');
+            if (icon) icon.textContent = 'menu';
+        }
+    }
+
     // State used by functions that can run during initial boot (e.g. the
     // welcome message) or from an event listener fired before the rest of
     // this script has finished its first pass — must be declared up front,
@@ -66,10 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startNewChat() {
+        closeMobileSidebarDrawer();
         chatWindow.innerHTML = ''; // Clear UI
         activeSessionId = 'session_' + Date.now();
         localStorage.setItem('zyviora_active_session_id', activeSessionId);
-        
+
         const sessions = loadChatSessions();
         sessions.unshift({ id: activeSessionId, title: 'New Chat', timestamp: Date.now(), messages: [] });
         saveChatSessions(sessions);
@@ -81,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function switchSession(sessionId) {
+        closeMobileSidebarDrawer();
         activeSessionId = sessionId;
         localStorage.setItem('zyviora_active_session_id', activeSessionId);
         chatWindow.innerHTML = ''; // Clear UI
@@ -1245,6 +1273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     toggleVoiceBtn.addEventListener('click', () => {
+        closeMobileSidebarDrawer();
         isVoiceModeActive = !isVoiceModeActive;
         toggleVoiceBtn.classList.toggle('active');
         
@@ -1306,6 +1335,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sidebar "Play a Game" button
     openGamesBtn.addEventListener('click', () => {
+        closeMobileSidebarDrawer();
         appendBotMessageTracked("Sure! Let's play something! 🎮 Pick a game:");
         setTimeout(() => showGamePicker(chatWindow, appendBotMessageTracked), 400);
     });
@@ -1345,6 +1375,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Sidebar Toggle
+    // This file has two independent DOMContentLoaded listeners (this is the
+    // second one) — they don't share scope, so the toggleSidebarBtn/sidebar
+    // consts declared near the top for closeMobileSidebarDrawer() aren't
+    // visible here; re-fetching the same DOM elements locally is harmless.
     const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
     const sidebar = document.getElementById('sidebar');
     if (toggleSidebarBtn && sidebar) {

@@ -141,7 +141,7 @@ function startWordGuess(chatWindow, appendBotMessageTracked) {
         <p style="font-size:13px;color:#6b7280;margin-bottom:14px">I've picked a 5-letter word. You have 6 tries. Green = right position, Yellow = wrong position, Gray = not in word.</p>
         <div id="wg-grid" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
         <div style="display:flex;gap:8px;align-items:center">
-            <input id="wg-input" maxlength="5" placeholder="5-letter word..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.6);color:#1a1a2e;font-size:15px;font-family:Inter,sans-serif;outline:none;text-transform:uppercase">
+            <input id="wg-input" maxlength="5" placeholder="5-letter word..." style="flex:1;min-width:0;padding:8px 12px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.6);color:#1a1a2e;font-size:15px;font-family:Inter,sans-serif;outline:none;text-transform:uppercase">
             <button id="wg-btn" style="padding:8px 14px;border-radius:8px;background:linear-gradient(135deg,#6a00ff,#a64aff);color:white;border:none;cursor:pointer;font-size:14px">Guess</button>
         </div>
         <p id="wg-msg" style="margin-top:10px;font-size:13px;color:#6a00ff;min-height:18px"></p>
@@ -159,14 +159,19 @@ function startWordGuess(chatWindow, appendBotMessageTracked) {
 
     function renderRow(guess, target) {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:6px;justify-content:flex-start';
+        // Fixed 4px/6px sizing here would need ~234px of unbroken width for
+        // 5 cells — more than a 320-375px phone has left after the sidebar
+        // avatar, gaps and bubble padding, forcing the whole chat window to
+        // overflow horizontally. clamp() keeps the original 42px look from
+        // ~600px width up while shrinking to fit on an actual phone.
+        row.style.cssText = 'display:flex;gap:clamp(3px,1vw,6px);justify-content:flex-start';
         for (let i = 0; i < 5; i++) {
             const cell = document.createElement('div');
             cell.textContent = guess[i];
             let color = '#6b7280'; // gray - not in word
             if (guess[i] === target[i])              color = '#538d4e'; // green
             else if (target.includes(guess[i]))      color = '#b59f3b'; // yellow
-            cell.style.cssText = `width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;border-radius:6px;background:${color};border:1px solid rgba(0,0,0,0.1);color:white;`;
+            cell.style.cssText = `width:clamp(26px,7vw,42px);height:clamp(26px,7vw,42px);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;border-radius:6px;background:${color};border:1px solid rgba(0,0,0,0.1);color:white;`;
             row.appendChild(cell);
         }
         grid.appendChild(row);
@@ -221,7 +226,11 @@ function startTicTacToe(chatWindow, appendBotMessageTracked) {
     status.textContent = 'You are X. Your turn!';
 
     const grid = document.createElement('div');
-    grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px;';
+    // grid-template-columns:1fr already lets the tracks shrink, but each
+    // cell button's own fixed 70px width/height set its content minimum
+    // too — same fixed-grid overflow this game shares with Word Guess, just
+    // via CSS grid instead of flex. clamp() keeps 70px from ~600px up.
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(4px,1.5vw,6px);margin-bottom:12px;';
 
     bubble.innerHTML = `<p style="font-weight:600;margin-bottom:10px;color:#1a1a2e;">⭕ Tic Tac Toe vs Zyviora</p>`;
     bubble.appendChild(status);
@@ -229,7 +238,7 @@ function startTicTacToe(chatWindow, appendBotMessageTracked) {
 
     for (let i = 0; i < 9; i++) {
         const cell = document.createElement('button');
-        cell.style.cssText = 'width:70px;height:70px;font-size:28px;font-weight:700;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.7);color:#1a1a2e;cursor:pointer;transition:background 0.2s;box-shadow:inset 2px 2px 5px rgba(255,255,255,1), inset -2px -2px 5px rgba(0,0,0,0.05);';
+        cell.style.cssText = 'width:clamp(48px,15vw,70px);height:clamp(48px,15vw,70px);font-size:clamp(20px,6vw,28px);font-weight:700;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.7);color:#1a1a2e;cursor:pointer;transition:background 0.2s;box-shadow:inset 2px 2px 5px rgba(255,255,255,1), inset -2px -2px 5px rgba(0,0,0,0.05);';
         cell.dataset.index = i;
         cell.addEventListener('mouseenter', () => { if (!cell.textContent) cell.style.background = 'rgba(255,255,255,1)'; });
         cell.addEventListener('mouseleave', () => { if (!cell.textContent) cell.style.background = 'rgba(255,255,255,0.7)'; });
@@ -442,7 +451,7 @@ function startNumberGuess(chatWindow, appendBotMessageTracked) {
         <p style="font-weight:600;margin-bottom:8px;color:#1a1a2e;">🔢 Number Guess!</p>
         <p style="font-size:13px;color:#6b7280;margin-bottom:12px">I'm thinking of a number between 1 and 50. You have ${maxAttempts} tries!</p>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-            <input id="ng-input" type="number" min="1" max="50" placeholder="Your guess..." style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.6);color:#1a1a2e;font-size:15px;font-family:Inter,sans-serif;outline:none;">
+            <input id="ng-input" type="number" min="1" max="50" placeholder="Your guess..." style="flex:1;min-width:0;padding:8px 12px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:rgba(255,255,255,0.6);color:#1a1a2e;font-size:15px;font-family:Inter,sans-serif;outline:none;">
             <button id="ng-btn" style="padding:8px 14px;border-radius:8px;background:linear-gradient(135deg,#6a00ff,#a64aff);color:white;border:none;cursor:pointer;font-size:14px">Guess</button>
         </div>
         <p id="ng-msg" style="font-size:13px;color:#6a00ff;min-height:18px;font-weight:500;"></p>

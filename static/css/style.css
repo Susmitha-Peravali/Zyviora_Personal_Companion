@@ -650,6 +650,14 @@ a {
     line-height: 1.6;
     font-size: 15px;
     white-space: pre-wrap;
+    /* A flex item's default min-width:auto lets its content dictate a
+       minimum that ignores the flex container's own constraints — the
+       same class of bug already hit once on the dashboard's stat-card
+       grid. Without this, a bubble with a long word/URL (or, worse, a
+       fixed-size game grid inside it) refuses to shrink to fit a narrow
+       phone screen and forces the whole chat-window wider instead. */
+    min-width: 0;
+    overflow-wrap: break-word;
 }
 
 .bot-message .bubble {
@@ -688,6 +696,13 @@ a {
 
 #user-input {
     flex-grow: 1;
+    /* Text inputs carry their own non-trivial browser-default intrinsic
+       width, and unlike ordinary text content that becomes their flex
+       minimum too — flex-grow alone doesn't let them shrink below it. On a
+       narrow phone with the mic button also visible (voice mode on) this
+       refused to shrink and pushed the whole input pill wider than the
+       screen. */
+    min-width: 0;
     color: #1a1a2e;
     font-weight: 500;
     font-size: 16px;
