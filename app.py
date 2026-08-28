@@ -17,6 +17,8 @@ import smtplib
 import subprocess
 import webbrowser
 from email.message import EmailMessage
+import html
+import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -37,6 +39,13 @@ logger = logging.getLogger("zyviora")
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE":
     genai.configure(api_key=GEMINI_API_KEY)
+
+# YouTube Data API v3 — free tier (10,000 units/day, a search costs 100),
+# no billing account required. Used to surface real, clickable learning
+# resources instead of an LLM guessing at video titles/links that may not
+# exist. Get a key at https://console.cloud.google.com/apis/credentials
+# after enabling "YouTube Data API v3" on a project.
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 
 # SMTP is deliberately generic (not tied to one vendor's SDK) — point it at
 # a Gmail app password, SendGrid/Mailgun/Brevo's SMTP relay, or any other
@@ -642,6 +651,64 @@ def chat():
     session['chat_context'] = context
     
     return jsonify({'response': response_text})
+
+@app.route('/api/learning-resources', methods=['POST'])
+@limiter.limit("20 per minute")
+def learning_resources():
+    """Real, clickable learning resources for a topic via the YouTube Data
+    API — deliberately not asking Gemini to invent video titles/links,
+    since an LLM has no way to know those actually exist. No login
+    required, matching /chat's guest-friendly access."""
+    data = request.get_json(silent=True) or {}
+    topic = (data.get('topic') or '').strip()
+    if not topic:
+        return jsonify({'status': 'error', 'message': 'Topic is required'}), 400
+    if len(topic) > 200:
+        return jsonify({'status': 'error', 'message': 'Topic is too long'}), 400
+
+    if not YOUTUBE_API_KEY:
+        # Not a hard failure — the frontend falls back to a direct YouTube
+        # search link, so this degrades gracefully when unconfigured.
+        return jsonify({'status': 'unconfigured'})
+
+    try:
+        resp = requests.get(
+            'https://www.googleapis.com/youtube/v3/search',
+            params={
+                'part': 'snippet',
+                'q': topic,
+                'type': 'video',
+                'maxResults': 5,
+                'safeSearch': 'strict',
+                'relevanceLanguage': 'en',
+                'key': YOUTUBE_API_KEY,
+            },
+            timeout=8
+        )
+        resp.raise_for_status()
+        items = resp.json().get('items', [])
+
+        videos = []
+        for item in items:
+            video_id = item.get('id', {}).get('videoId')
+            snippet = item.get('snippet') or {}
+            if not video_id:
+                continue
+            thumb = (snippet.get('thumbnails') or {}).get('medium') or {}
+            videos.append({
+                # YouTube's API returns HTML-escaped text (e.g. "&amp;") in
+                # titles/channel names — unescape before sending to the
+                # frontend, which renders these as plain text.
+                'title': html.unescape(snippet.get('title', '')),
+                'channel': html.unescape(snippet.get('channelTitle', '')),
+                'thumbnail': thumb.get('url', ''),
+                'url': f'https://www.youtube.com/watch?v={video_id}',
+            })
+
+        return jsonify({'status': 'success', 'videos': videos})
+    except requests.RequestException as e:
+        logger.warning("YouTube API request failed: %s", e)
+        return jsonify({'status': 'error', 'message': 'Could not reach the resource search right now.'}), 502
 
 @app.route('/open-app', methods=['POST'])
 @api_login_required

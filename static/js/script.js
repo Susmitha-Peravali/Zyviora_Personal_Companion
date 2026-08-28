@@ -977,6 +977,110 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================
+    // MODULE 10: CURATED LEARNING RESOURCES
+    // Deliberately backed by a real search (YouTube Data API, see
+    // /api/learning-resources in app.py) rather than asking Gemini to name
+    // videos itself — an LLM has no way to know a title/link it invents
+    // actually exists, and a "helpful" dead link is worse than none.
+    // =========================================================
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function extractLearningTopic(text) {
+        const patterns = [
+            /^teach me(?: about)?\s+(.+)/i,
+            /^i want to learn(?: about)?\s+(.+)/i,
+            /^how (?:do|can) i learn\s+(.+)/i,
+            /^help me learn\s+(.+)/i,
+            /^resources (?:for|on|about)\s+(.+)/i,
+            /^learning resources (?:for|on|about)\s+(.+)/i,
+            /^where can i learn\s+(.+)/i,
+            /^how to learn\s+(.+)/i,
+            /^find (?:me )?(?:some )?(?:videos|tutorials) (?:for|on|about)\s+(.+)/i,
+        ];
+        for (const re of patterns) {
+            const m = text.match(re);
+            if (m && m[1]) {
+                const topic = m[1].trim().replace(/[?.!]+$/, '');
+                if (topic.length > 0 && topic.length <= 200) return topic;
+            }
+        }
+        return null;
+    }
+
+    function renderResourceCards(bubble, topic, videos) {
+        const safeTopic = escapeHtml(topic);
+        let html = `<p style="margin-bottom:10px;">📚 Here's what I found on "<strong>${safeTopic}</strong>":</p>`;
+        html += '<div style="display:flex;flex-direction:column;gap:10px;">';
+        videos.forEach(v => {
+            const safeTitle = escapeHtml(v.title || 'Untitled');
+            const safeChannel = escapeHtml(v.channel || '');
+            const safeUrl = escapeHtml(v.url || '#');
+            const thumb = v.thumbnail ? escapeHtml(v.thumbnail) : '';
+            html += `
+                <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:flex;gap:10px;text-decoration:none;color:inherit;background:rgba(255,255,255,0.6);border-radius:14px;padding:8px;border:1px solid rgba(0,0,0,0.06);transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                    ${thumb ? `<img src="${thumb}" alt="" style="width:100px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0;">` : ''}
+                    <div style="min-width:0;">
+                        <div style="font-weight:600;font-size:0.88rem;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${safeTitle}</div>
+                        <div style="font-size:0.76rem;color:#6b7280;margin-top:2px;">${safeChannel}</div>
+                    </div>
+                </a>`;
+        });
+        html += '</div><p style="margin-top:10px;font-size:0.78rem;color:#6b7280;">Want more on this, or a different topic?</p>';
+        bubble.innerHTML = html;
+    }
+
+    function tryHandleLearningResources(text) {
+        const topic = extractLearningTopic(text);
+        if (!topic) return false;
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar thinking';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+        bubble.innerHTML = `<p style="margin-bottom:8px;">🔎 Looking up good resources on "${escapeHtml(topic)}"...</p><div class="typing-dots"><span></span><span></span><span></span></div>`;
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        const searchLink = `https://www.youtube.com/results?search_query=${encodeURIComponent(topic)}`;
+
+        fetch('/api/learning-resources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ topic })
+        })
+        .then(r => r.json())
+        .then(data => {
+            avatar.classList.remove('thinking');
+            if (data.status === 'success' && data.videos && data.videos.length > 0) {
+                renderResourceCards(bubble, topic, data.videos);
+            } else if (data.status === 'unconfigured') {
+                bubble.innerHTML = `I'd love to pull up real videos on that, but my learning-resources connection isn't set up yet. You can search directly here for now: <a href="${searchLink}" target="_blank" rel="noopener noreferrer">${escapeHtml(topic)} on YouTube</a>`;
+            } else {
+                bubble.innerHTML = `Hmm, I couldn't find resources for that right now. Want to try a different topic, or <a href="${searchLink}" target="_blank" rel="noopener noreferrer">search directly on YouTube</a>?`;
+            }
+            addMessageToHistory(bubble.innerHTML, 'bot', true);
+            lastBotMessageTime = Date.now();
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        })
+        .catch(() => {
+            avatar.classList.remove('thinking');
+            bubble.innerHTML = `I couldn't reach my resource search right now. Please try again in a moment, or <a href="${searchLink}" target="_blank" rel="noopener noreferrer">search directly on YouTube</a>.`;
+            addMessageToHistory(bubble.innerHTML, 'bot', true);
+        });
+
+        return true;
+    }
+
+    // =========================================================
     // CORE: handleUserMessage (orchestrates all modules)
     // =========================================================
     function handleUserMessage() {
@@ -995,6 +1099,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tryHandleFunRequest(text))  return;
         if (tryHandleDailyReport(text)) return;
         if (tryHandleWellnessRequest(text)) return;
+        if (tryHandleLearningResources(text)) return;
 
         // --- Layer 2: Safe Emotional Support (crisis detection) ---
         if (checkForCrisisSignals(text)) return;
