@@ -14,6 +14,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Games button (sidebar)
     const openGamesBtn = document.getElementById('open-games-btn');
+    // Learning-resources/help buttons (sidebar) — explicit, clickable entry
+    // points for capabilities that otherwise only worked if a user
+    // happened to type the right phrase, with no way to discover they
+    // existed at all (the exact gap "Play a Game" already avoided by
+    // having a real button instead of relying only on "I'm bored").
+    const openLearnBtn = document.getElementById('open-learn-btn');
+    const openHelpBtn = document.getElementById('open-help-btn');
+    // When true, the next message the user sends is treated as a raw
+    // learning topic directly (searchLearningResources), bypassing
+    // extractLearningTopic's phrase-matching entirely — so clicking the
+    // button and then typing literally anything ("cooking", "how planes
+    // fly") works, no specific wording required.
+    let awaitingLearningTopic = false;
 
     // Sidebar drawer elements — referenced from startNewChat/switchSession
     // below (called during initial boot) as well as from the toggle button's
@@ -115,13 +128,23 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('zyviora_active_session_id', activeSessionId);
 
         const sessions = loadChatSessions();
+        const isFirstEverSession = sessions.length === 0;
         sessions.unshift({ id: activeSessionId, title: 'New Chat', timestamp: Date.now(), messages: [] });
         saveChatSessions(sessions);
         updateChatHeader();
-        
+
         // Time-aware greeting
         const ctx = getTimeContext();
         appendBotMessageTracked(timeGreetings[ctx], true);
+
+        // First session ever — most of the sidebar's capabilities aren't
+        // obvious on sight, and previously there was no way to discover
+        // them short of guessing the right phrase to type.
+        if (isFirstEverSession) {
+            setTimeout(() => appendBotMessageTracked(
+                'New here? Click "What Can I Do?" in the sidebar any time to see everything I can help with 💙', true
+            ), 900);
+        }
     }
 
     function switchSession(sessionId) {
@@ -989,6 +1012,51 @@ document.addEventListener('DOMContentLoaded', () => {
         return div.innerHTML;
     }
 
+    /**
+     * A plain-language reference for every capability that only worked if
+     * a user happened to type the right phrase — tasks, reminders, goals,
+     * wellness, and learning all fall into this category (games and voice
+     * mode already have their own sidebar buttons, so they're mentioned
+     * only briefly). Triggered by the "What Can I Do?" sidebar button, and
+     * also directly by typing a help request, so it's reachable either way.
+     */
+    function showCapabilitiesHelp() {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+        bubble.innerHTML = `
+            <p style="font-weight:600;margin-bottom:10px;">Here's everything I can help with 💙</p>
+            <ul style="padding-left:0;list-style:none;display:flex;flex-direction:column;gap:10px;font-size:0.88rem;line-height:1.5;">
+                <li>📚 <strong>Learn something</strong> — click "Learn Something" in the sidebar, or just say what you want to learn (e.g. "I want to learn photography"). I'll find real videos, and can build you a step-by-step Skill Path.</li>
+                <li>🎯 <strong>Tasks</strong> — "add task: buy groceries", "show my tasks", "mark task 1 as done".</li>
+                <li>⏰ <strong>Reminders</strong> — "remind me to call mom in 20 minutes" or "...at 5pm".</li>
+                <li>🌱 <strong>Goals</strong> — "my goal is to exercise daily", then "I completed exercise daily" when you do it.</li>
+                <li>🌬️ <strong>Feeling stressed?</strong> — say "I need to relax" anytime for a guided breathing exercise, or I'll gently offer one if I notice you seem overwhelmed.</li>
+                <li>🎮 <strong>Games</strong> — click "Play a Game" in the sidebar, or say "I'm bored".</li>
+                <li>🎤 <strong>Voice Mode</strong> — click it in the sidebar to talk instead of type.</li>
+                <li>📊 <strong>Dashboard</strong> — click it in the sidebar to see your mood history, goals, tasks, reminders, and skill paths all in one place.</li>
+            </ul>
+        `;
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        addMessageToHistory(bubble.innerHTML, 'bot', true);
+        lastBotMessageTime = Date.now();
+    }
+
+    function tryHandleHelpRequest(text) {
+        if (/^(?:help|what can (?:you|i) do|what can zyviora do|show (?:me )?(?:your |the )?(?:features|capabilities|commands))\??$/i.test(text.trim())) {
+            showCapabilitiesHelp();
+            return true;
+        }
+        return false;
+    }
+
     function extractLearningTopic(text) {
         // Verb-first phrasings ("teach me X") capture the topic as
         // everything AFTER the trigger phrase.
@@ -1319,7 +1387,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function tryHandleLearningResources(text) {
         const topic = extractLearningTopic(text);
         if (!topic) return false;
+        searchLearningResources(topic);
+        return true;
+    }
 
+    /**
+     * Runs the actual search for a given topic, no phrase-matching
+     * involved — used both by tryHandleLearningResources (once a trigger
+     * phrase is recognized) and directly by the "Learn Something" sidebar
+     * button, so a user doesn't need to know or guess any specific wording
+     * to use this feature at all.
+     */
+    function searchLearningResources(topic) {
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message bot-message';
         const avatar = document.createElement('div');
@@ -1359,8 +1438,6 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.innerHTML = `I couldn't reach my resource search right now. Please try again in a moment, or <a href="${searchLink}" target="_blank" rel="noopener noreferrer">search directly on YouTube</a>.`;
             addMessageToHistory(bubble.innerHTML, 'bot', true);
         });
-
-        return true;
     }
 
     // =========================================================
@@ -1374,6 +1451,17 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput.value = '';
         resetIdleTimer();
 
+        // Layer 0: pending guided input from a sidebar button (see
+        // "Learn Something") — takes priority over every phrase-matching
+        // layer below since the user already told us their intent by
+        // clicking; whatever they type next IS the topic, not something
+        // that needs to look like a specific command.
+        if (awaitingLearningTopic) {
+            awaitingLearningTopic = false;
+            searchLearningResources(text);
+            return;
+        }
+
         // --- Layer 1: Frontend-only intercepts (no backend round-trip needed) ---
         if (tryHandleSystemCommand(text)) return;
         if (tryHandleTasks(text))       return;
@@ -1384,6 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tryHandleWellnessRequest(text)) return;
         if (tryHandleLearningResources(text)) return;
         if (tryHandleSkillPathList(text)) return;
+        if (tryHandleHelpRequest(text)) return;
 
         // --- Layer 2: Safe Emotional Support (crisis detection) ---
         if (checkForCrisisSignals(text)) return;
@@ -2044,6 +2133,27 @@ document.addEventListener('DOMContentLoaded', () => {
         appendBotMessageTracked("Sure! Let's play something! 🎮 Pick a game:");
         setTimeout(() => showGamePicker(chatWindow, appendBotMessageTracked), 400);
     });
+
+    // Sidebar "Learn Something" button — no phrase to guess, just click and
+    // type whatever topic comes to mind.
+    if (openLearnBtn) {
+        openLearnBtn.addEventListener('click', () => {
+            closeMobileSidebarDrawer();
+            awaitingLearningTopic = true;
+            appendBotMessageTracked("What would you like to learn? Type any topic and I'll find real resources for it 📚");
+            userInput.focus();
+        });
+    }
+
+    // Sidebar "What Can I Do?" button — a plain-language reference for
+    // every capability that otherwise only worked if you happened to type
+    // the right phrase, with no in-app way to know it existed.
+    if (openHelpBtn) {
+        openHelpBtn.addEventListener('click', () => {
+            closeMobileSidebarDrawer();
+            showCapabilitiesHelp();
+        });
+    }
 
 });
 
