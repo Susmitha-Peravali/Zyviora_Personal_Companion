@@ -21,12 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // having a real button instead of relying only on "I'm bored").
     const openLearnBtn = document.getElementById('open-learn-btn');
     const openHelpBtn = document.getElementById('open-help-btn');
-    // When true, the next message the user sends is treated as a raw
-    // learning topic directly (searchLearningResources), bypassing
-    // extractLearningTopic's phrase-matching entirely — so clicking the
-    // button and then typing literally anything ("cooking", "how planes
-    // fly") works, no specific wording required.
-    let awaitingLearningTopic = false;
+    // When set, the next message the user sends is routed directly to a
+    // specific action instead of running through every phrase-matching
+    // layer — the general mechanism behind every clickable action in the
+    // "What Can I Do?" panel (and the "Learn Something" button): click,
+    // get told what to type, and whatever comes next just works, no
+    // specific wording required. One of: 'learning' | 'task' | 'goal' |
+    // 'reminder' | null.
+    let pendingGuidedAction = null;
 
     // Sidebar drawer elements — referenced from startNewChat/switchSession
     // below (called during initial boot) as well as from the toggle button's
@@ -681,6 +683,18 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
     }
 
+    /**
+     * Saves a goal from raw text with no prefix required — used once a
+     * prefix/context match fires below, and directly by the "What Can I
+     * Do?" panel's guided "Set a Goal" action.
+     */
+    function addGoalDirect(text) {
+        const goal = text.trim();
+        if (!goal) return;
+        saveGoal(goal);
+        appendBotMessageTracked(`🎯 Goal added: "${goal}". I'll help you stay on track and remind you to celebrate every win!`);
+    }
+
     function tryHandleGoal(text) {
         // Detect "add goal: [text]" or "set goal: [text]" or "my goal is [text]"
         const addMatch = text.match(/(?:(?:add|set|track|new)\s+goal|my goal is)[:\s]+(.+)/i);
@@ -688,14 +702,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isGoalContext = /You haven't set any goals yet! Try saying:/i.test(lastBotMsg);
 
         if (addMatch) {
-            const goal = addMatch[1].trim();
-            saveGoal(goal);
-            appendBotMessageTracked(`🎯 Goal added: "${goal}". I'll help you stay on track and remind you to celebrate every win!`);
+            addGoalDirect(addMatch[1]);
             return true;
         } else if (isGoalContext && text.length > 3) {
             // Context-aware fallback: if bot just prompted for a goal, treat raw input as a goal
-            saveGoal(text);
-            appendBotMessageTracked(`🎯 Goal added: "${text}". I'll help you stay on track and remind you to celebrate every win!`);
+            addGoalDirect(text);
             return true;
         }
 
@@ -771,22 +782,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     // MODULE 7.5: WOW FEATURE (DAILY AI REPORT)
     // =========================================================
+    /**
+     * Builds and shows the daily report — used once the phrase below
+     * matches, and directly by the "What Can I Do?" panel's instant
+     * "Get My Daily Report" action (no guided input needed for this one).
+     */
+    function showDailyReport() {
+        const lastMood = getMemory('lastMood') || "unknown";
+        let rawGoals = localStorage.getItem('zyviora_goals');
+        let completed = 0;
+        if (rawGoals) {
+            const goals = JSON.parse(rawGoals);
+            goals.forEach(g => { if (g.completedToday) completed++; });
+        }
+
+        const message = `📊 **Your Daily Report**\n\n` +
+                        `• Mood today: ${lastMood.charAt(0).toUpperCase() + lastMood.slice(1)}\n` +
+                        `• Goals completed: ${completed}\n\n` +
+                        `Suggestion for tomorrow: Keep taking it one step at a time! I'm proud of you. 🌟`;
+
+        appendBotMessageTracked(message);
+    }
+
     function tryHandleDailyReport(text) {
         if (/(?:show my daily report|daily summary|how am i doing today)/i.test(text)) {
-            const lastMood = getMemory('lastMood') || "unknown";
-            let rawGoals = localStorage.getItem('zyviora_goals');
-            let completed = 0;
-            if (rawGoals) {
-                const goals = JSON.parse(rawGoals);
-                goals.forEach(g => { if (g.completedToday) completed++; });
-            }
-            
-            const message = `📊 **Your Daily Report**\n\n` + 
-                            `• Mood today: ${lastMood.charAt(0).toUpperCase() + lastMood.slice(1)}\n` +
-                            `• Goals completed: ${completed}\n\n` +
-                            `Suggestion for tomorrow: Keep taking it one step at a time! I'm proud of you. 🌟`;
-                            
-            appendBotMessageTracked(message);
+            showDailyReport();
             return true;
         }
         return false;
@@ -841,6 +861,12 @@ document.addEventListener('DOMContentLoaded', () => {
         "🌙 A day on Venus is longer than a year on Venus — it rotates so slowly that the sun rises only once every 243 Earth days."
     ];
 
+    function tellFunFact() {
+        const fact = funFacts[Math.floor(Math.random() * funFacts.length)];
+        appendBotMessageTracked(fact);
+        setTimeout(() => appendBotMessageTracked("Want another one? Just say 'tell me something interesting'! 😊"), 1200);
+    }
+
     function tryHandleFunRequest(text) {
         const lower = text.toLowerCase().trim();
 
@@ -881,9 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Fun fact request
         if (/(?:tell me something|fun fact|something interesting|entertain me)/i.test(lower)) {
-            const fact = funFacts[Math.floor(Math.random() * funFacts.length)];
-            appendBotMessageTracked(fact);
-            setTimeout(() => appendBotMessageTracked("Want another one? Just say 'tell me something interesting'! 😊"), 1200);
+            tellFunFact();
             return true;
         }
 
@@ -904,33 +928,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     // MODULE 8: SYSTEM COMMANDS
     // =========================================================
+    const OPEN_APP_NAMES = ['calculator', 'notepad', 'word', 'powerpoint', 'youtube', 'calendar'];
+    const OPEN_APP_EMOJIS = { calculator: "🧮", notepad: "📝", word: "📄", powerpoint: "📊", youtube: "🎬", calendar: "📅" };
+
+    /**
+     * Launches an app — but on whatever machine is running the Flask
+     * server, NOT the visitor's own device. That's a real, easy-to-miss
+     * trap for a feature exposed in chat: on a real deployment (Render,
+     * anywhere else), clicking this opens Calculator on the SERVER,
+     * invisibly to the user, not on their own screen. Only genuinely does
+     * what it sounds like when you're running Zyviora on your own machine.
+     * The caller is responsible for surfacing that caveat before invoking
+     * this — see the "What Can I Do?" panel's Open An App action.
+     */
+    function openAppByName(appName) {
+        appendBotMessageTracked(`Opening ${appName.charAt(0).toUpperCase() + appName.slice(1)} for you ${OPEN_APP_EMOJIS[appName] || '🚀'}...`);
+
+        fetch('/open-app', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ app_name: appName })
+        })
+        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok && data.message === 'Not logged in') {
+                appendBotMessageTracked("Opening apps on this device needs you to be logged in first — head to /login and try again 🔒");
+            } else if (data.status !== 'success') {
+                appendBotMessageTracked("Hmm, I couldn't open that. Try again?");
+            }
+        })
+        .catch(() => {
+            appendBotMessageTracked("Hmm, I couldn't open that. Are we offline?");
+        });
+    }
+
     function tryHandleSystemCommand(text) {
         const lower = text.toLowerCase().trim();
         const cmdMatch = lower.match(/^open\s+(calculator|notepad|word|powerpoint|youtube|calendar)$/i);
-        
         if (cmdMatch) {
-            const appName = cmdMatch[1];
-            const emojis = { calculator: "🧮", notepad: "📝", word: "📄", powerpoint: "📊", youtube: "🎬", calendar: "📅" };
-            
-            appendBotMessageTracked(`Opening ${appName.charAt(0).toUpperCase() + appName.slice(1)} for you ${emojis[appName]||'🚀'}...`);
-            
-            fetch('/open-app', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({ app_name: appName })
-            })
-            .then(res => res.json().then(data => ({ ok: res.ok, data })))
-            .then(({ ok, data }) => {
-                if (!ok && data.message === 'Not logged in') {
-                    appendBotMessageTracked("Opening apps on this device needs you to be logged in first — head to /login and try again 🔒");
-                } else if (data.status !== 'success') {
-                    appendBotMessageTracked("Hmm, I couldn't open that. Try again?");
-                }
-            })
-            .catch(() => {
-                appendBotMessageTracked("Hmm, I couldn't open that. Are we offline?");
-            });
-            
+            openAppByName(cmdMatch[1]);
             return true;
         }
         return false;
@@ -950,32 +986,47 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
     }
 
+    /**
+     * Saves a task from raw text with no "add task:" prefix required —
+     * used both once that prefix is matched below, and directly by the
+     * "What Can I Do?" panel's guided "Add a Task" action.
+     */
+    function addTaskDirect(text) {
+        const taskText = text.trim();
+        if (!taskText) return;
+        const tasks = loadTasks();
+        tasks.push({ id: Date.now(), text: taskText, status: 'pending', createdAt: Date.now() });
+        saveTasks(tasks);
+        appendBotMessageTracked(`Got it! I've added that to your tasks 😊`);
+    }
+
+    function showTasksList() {
+        const tasks = loadTasks();
+        if (tasks.length === 0) {
+            appendBotMessageTracked("You don't have any pending tasks right now. Try saying \"Add task: ...\"");
+            return;
+        }
+        const pending = tasks.filter(t => t.status === 'pending');
+        if (pending.length === 0) {
+            appendBotMessageTracked("All your tasks are complete! Great job! 🎉");
+        } else {
+            let list = pending.map((t, i) => `${i+1}. ${t.text}`).join('\n');
+            appendBotMessageTracked(`Here are your pending tasks:\n\n${list}`);
+        }
+    }
+
     function tryHandleTasks(text) {
         const lower = text.toLowerCase().trim();
-        
+
         // Relaxed regex to catch "add task foo", "add task: foo", "remind me to add task foo"
         const addMatch = text.match(/add task[:\s]+(.+)/i) || text.match(/remind me to add task[:\s]+(.+)/i);
         if (addMatch) {
-            const tasks = loadTasks();
-            tasks.push({ id: Date.now(), text: addMatch[1].trim(), status: 'pending', createdAt: Date.now() });
-            saveTasks(tasks);
-            appendBotMessageTracked(`Got it! I've added that to your tasks 😊`);
+            addTaskDirect(addMatch[1]);
             return true;
         }
 
         if (/(?:show|list|what are).*my.*tasks/i.test(lower)) {
-            const tasks = loadTasks();
-            if (tasks.length === 0) {
-                appendBotMessageTracked("You don't have any pending tasks right now. Try saying \"Add task: ...\"");
-            } else {
-                const pending = tasks.filter(t => t.status === 'pending');
-                if(pending.length === 0) {
-                    appendBotMessageTracked("All your tasks are complete! Great job! 🎉");
-                } else {
-                    let list = pending.map((t, i) => `${i+1}. ${t.text}`).join('\n');
-                    appendBotMessageTracked(`Here are your pending tasks:\n\n${list}`);
-                }
-            }
+            showTasksList();
             return true;
         }
 
@@ -1020,6 +1071,39 @@ document.addEventListener('DOMContentLoaded', () => {
      * only briefly). Triggered by the "What Can I Do?" sidebar button, and
      * also directly by typing a help request, so it's reachable either way.
      */
+    /**
+     * Every capability that previously only worked if you happened to
+     * type the right phrase, now with a real action attached — clicking
+     * does the thing directly instead of just describing how you'd have
+     * to ask for it yourself. 'prompt' actions set pendingGuidedAction and
+     * wait for the next message; 'run' actions happen immediately.
+     */
+    const CAPABILITY_ACTIONS = [
+        { icon: '📚', title: 'Learn something', desc: 'Real videos on any topic, and I can build you a step-by-step Skill Path.', kind: 'prompt', action: 'learning', prompt: "What would you like to learn? Type any topic and I'll find real resources for it 📚" },
+        { icon: '🎯', title: 'Add a task', desc: 'Just tell me what it is.', kind: 'prompt', action: 'task', prompt: 'What task would you like to add?' },
+        { icon: '📋', title: 'Show my tasks', desc: 'See what\'s pending.', kind: 'run', run: () => showTasksList() },
+        { icon: '⏰', title: 'Set a reminder', desc: 'e.g. "call mom in 20 minutes" or "at 5pm".', kind: 'prompt', action: 'reminder', prompt: 'What should I remind you about, and when? (e.g. "call mom in 20 minutes" or "at 5pm")' },
+        { icon: '🌱', title: 'Set a goal', desc: 'Just tell me what it is.', kind: 'prompt', action: 'goal', prompt: "What's your goal? I'll help you stay on track." },
+        { icon: '📊', title: 'Get my daily report', desc: 'Mood + goals completed today.', kind: 'run', run: () => showDailyReport() },
+        { icon: '🌬️', title: 'Breathing exercise', desc: 'A guided moment to slow down.', kind: 'run', run: () => { appendBotMessageTracked("Of course — let's slow things down together. 💙"); setTimeout(() => startBreathingExercise(), 500); } },
+        { icon: '🎮', title: 'Play a game', desc: 'Word Guess, Tic Tac Toe, Quiz, and more.', kind: 'run', run: () => { closeMobileSidebarDrawer(); appendBotMessageTracked("Sure! Let's play something! 🎮 Pick a game:"); setTimeout(() => showGamePicker(chatWindow, appendBotMessageTracked), 400); } },
+        { icon: '🧠', title: 'Tell me a fun fact', desc: 'A random one, just for fun.', kind: 'run', run: () => tellFunFact() },
+        { icon: '🖥️', title: 'Open an app', desc: 'Only works when Zyviora is running on your own computer, not on a hosted deployment like this one — it opens the app on whichever machine is running the server.', kind: 'run', run: () => showOpenAppPicker() },
+        { icon: '📈', title: 'Open dashboard', desc: 'Mood history, goals, tasks, reminders, skill paths.', kind: 'link', href: '/dashboard' },
+    ];
+
+    function runCapabilityAction(item) {
+        if (item.kind === 'run') {
+            item.run();
+        } else if (item.kind === 'prompt') {
+            pendingGuidedAction = item.action;
+            appendBotMessageTracked(item.prompt);
+            userInput.focus();
+        } else if (item.kind === 'link') {
+            window.location.href = item.href;
+        }
+    }
+
     function showCapabilitiesHelp() {
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message bot-message';
@@ -1028,23 +1112,71 @@ document.addEventListener('DOMContentLoaded', () => {
         avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
         const bubble = document.createElement('div');
         bubble.className = 'bubble glass-panel';
-        bubble.innerHTML = `
-            <p style="font-weight:600;margin-bottom:10px;">Here's everything I can help with 💙</p>
-            <ul style="padding-left:0;list-style:none;display:flex;flex-direction:column;gap:10px;font-size:0.88rem;line-height:1.5;">
-                <li>📚 <strong>Learn something</strong> — click "Learn Something" in the sidebar, or just say what you want to learn (e.g. "I want to learn photography"). I'll find real videos, and can build you a step-by-step Skill Path.</li>
-                <li>🎯 <strong>Tasks</strong> — "add task: buy groceries", "show my tasks", "mark task 1 as done".</li>
-                <li>⏰ <strong>Reminders</strong> — "remind me to call mom in 20 minutes" or "...at 5pm".</li>
-                <li>🌱 <strong>Goals</strong> — "my goal is to exercise daily", then "I completed exercise daily" when you do it.</li>
-                <li>🌬️ <strong>Feeling stressed?</strong> — say "I need to relax" anytime for a guided breathing exercise, or I'll gently offer one if I notice you seem overwhelmed.</li>
-                <li>🎮 <strong>Games</strong> — click "Play a Game" in the sidebar, or say "I'm bored".</li>
-                <li>🎤 <strong>Voice Mode</strong> — click it in the sidebar to talk instead of type.</li>
-                <li>📊 <strong>Dashboard</strong> — click it in the sidebar to see your mood history, goals, tasks, reminders, and skill paths all in one place.</li>
-            </ul>
-        `;
+
+        let html = '<p style="font-weight:600;margin-bottom:10px;">Here\'s everything I can help with — click one 💙</p>';
+        html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+        CAPABILITY_ACTIONS.forEach((item, i) => {
+            html += `
+                <button class="capability-action" data-index="${i}" style="text-align:left;display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(0,0,0,0.08);background:rgba(255,255,255,0.55);cursor:pointer;font-family:inherit;">
+                    <span style="font-size:1.1rem;flex-shrink:0;">${item.icon}</span>
+                    <span style="min-width:0;">
+                        <span style="display:block;font-weight:600;font-size:0.88rem;color:#1a1a2e;">${escapeHtml(item.title)}</span>
+                        <span style="display:block;font-size:0.76rem;color:#6b7280;margin-top:2px;">${escapeHtml(item.desc)}</span>
+                    </span>
+                </button>`;
+        });
+        html += '</div>';
+        bubble.innerHTML = html;
+
         msgDiv.appendChild(avatar);
         msgDiv.appendChild(bubble);
         chatWindow.appendChild(msgDiv);
         chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        bubble.querySelectorAll('.capability-action').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = CAPABILITY_ACTIONS[parseInt(btn.getAttribute('data-index'), 10)];
+                runCapabilityAction(item);
+            });
+        });
+
+        addMessageToHistory(bubble.innerHTML, 'bot', true);
+        lastBotMessageTime = Date.now();
+    }
+
+    /**
+     * A small picker for the 6 apps /open-app supports, shown with the
+     * "only works when self-hosted" caveat every time it's opened via this
+     * path — the caveat matters enough (a hosted user clicking this would
+     * otherwise reasonably expect their OWN calculator to open) that it
+     * shouldn't be a one-time thing buried in a help list only.
+     */
+    function showOpenAppPicker() {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+        bubble.innerHTML = `<p style="margin-bottom:10px;">⚠️ This only opens apps on whichever computer is running the Zyviora server — on a hosted deployment like this one, that's not your own device. It's meant for when you're running Zyviora on your own machine. Still want to try?</p><div id="open-app-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>`;
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        const grid = bubble.querySelector('#open-app-grid');
+        OPEN_APP_NAMES.forEach(appName => {
+            const btn = document.createElement('button');
+            btn.className = 'game-pick-btn';
+            btn.innerHTML = `${OPEN_APP_EMOJIS[appName]} ${appName.charAt(0).toUpperCase() + appName.slice(1)}`;
+            btn.addEventListener('click', () => {
+                grid.querySelectorAll('button').forEach(b => b.disabled = true);
+                openAppByName(appName);
+            });
+            grid.appendChild(btn);
+        });
+
         addMessageToHistory(bubble.innerHTML, 'bot', true);
         lastBotMessageTime = Date.now();
     }
@@ -1451,15 +1583,35 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput.value = '';
         resetIdleTimer();
 
-        // Layer 0: pending guided input from a sidebar button (see
-        // "Learn Something") — takes priority over every phrase-matching
+        // Layer 0: pending guided input from a sidebar button or the "What
+        // Can I Do?" panel — takes priority over every phrase-matching
         // layer below since the user already told us their intent by
-        // clicking; whatever they type next IS the topic, not something
+        // clicking; whatever they type next IS the answer, not something
         // that needs to look like a specific command.
-        if (awaitingLearningTopic) {
-            awaitingLearningTopic = false;
-            searchLearningResources(text);
-            return;
+        if (pendingGuidedAction) {
+            const action = pendingGuidedAction;
+            pendingGuidedAction = null;
+            if (action === 'learning') {
+                searchLearningResources(text);
+                return;
+            }
+            if (action === 'task') {
+                addTaskDirect(text);
+                return;
+            }
+            if (action === 'goal') {
+                addGoalDirect(text);
+                return;
+            }
+            if (action === 'reminder') {
+                // Reminders genuinely need a time, not just free text, so
+                // this one still needs to parse — but if it fails, explain
+                // the format instead of silently doing nothing.
+                if (!tryHandleGuidedReminder(text)) {
+                    appendBotMessageTracked('I couldn\'t quite parse a time from that — try something like "call mom in 20 minutes" or "call mom at 5pm".');
+                }
+                return;
+            }
         }
 
         // --- Layer 1: Frontend-only intercepts (no backend round-trip needed) ---
@@ -1791,10 +1943,17 @@ document.addEventListener('DOMContentLoaded', () => {
      *   "remind me to [task] after [N] minutes/hours"
      * Returns { task, triggerAt } or null if no match.
      */
-    function parseReminderInput(text) {
-        // Support: "remind me to [task] in [N] mins" AND "remind me to [task] at [H:M AM/PM]"
-        const inPattern = /remind\s+me\s+to\s+(.+?)\s+(?:in|after)\s+(\d+)\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)/i;
-        const atPattern = /remind\s+me\s+to\s+(.+?)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+    function parseReminderInput(text, requirePrefix = true) {
+        // Support: "remind me to [task] in [N] mins" AND "remind me to [task] at [H:M AM/PM]".
+        // requirePrefix defaults to true for ordinary typed messages — without
+        // it, an unrelated sentence like "I'll be back in 5 minutes" would get
+        // misread as a reminder-creation command. The guided "Set a reminder"
+        // flow (where the user already told us their intent by clicking) calls
+        // this with requirePrefix:false, since re-typing "remind me to" after
+        // already being asked "what should I remind you about" is redundant.
+        const prefixPart = requirePrefix ? 'remind\\s+me\\s+to\\s+' : '(?:remind\\s+me\\s+to\\s+)?';
+        const inPattern = new RegExp(`${prefixPart}(.+?)\\s+(?:in|after)\\s+(\\d+)\\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)`, 'i');
+        const atPattern = new RegExp(`${prefixPart}(.+?)\\s+at\\s+(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)`, 'i');
 
         const inMatch = text.match(inPattern);
         if (inMatch) {
@@ -1888,21 +2047,43 @@ document.addEventListener('DOMContentLoaded', () => {
      * Entry point — try to intercept a reminder from user input.
      * Returns true if handled (caller should skip sending to backend).
      */
-    function tryHandleReminder(text) {
-        const parsed = parseReminderInput(text);
-        if (!parsed) return false;
-
+    /**
+     * Saves, schedules, and confirms an already-parsed reminder — shared by
+     * the ordinary typed-phrase path and the guided "Set a reminder" flow
+     * so both stay in sync rather than duplicating this logic.
+     */
+    function commitReminder(parsed) {
         if (parsed.mode === 'at') {
             appendBotMessageTracked(`Got it! ✅ I'll remind you to "${parsed.task}" at ${parsed.formattedTime}. I won't let you forget!`);
         } else {
-            const timeLabel = (parsed.triggerAt - Date.now()) >= 60000 ? 
-                              `${Math.round((parsed.triggerAt - Date.now()) / 60000)} minute(s)` : 
+            const timeLabel = (parsed.triggerAt - Date.now()) >= 60000 ?
+                              `${Math.round((parsed.triggerAt - Date.now()) / 60000)} minute(s)` :
                               `${Math.round((parsed.triggerAt - Date.now()) / 1000)} second(s)`;
             appendBotMessageTracked(`Got it! ✅ I'll remind you to "${parsed.task}" in ${timeLabel}. I won't let you forget!`);
         }
-        
+
         saveReminder(parsed);
         scheduleReminder(parsed);
+    }
+
+    function tryHandleReminder(text) {
+        const parsed = parseReminderInput(text);
+        if (!parsed) return false;
+        commitReminder(parsed);
+        return true;
+    }
+
+    /**
+     * Entry point for the guided "Set a reminder" flow — the user already
+     * confirmed intent by clicking, so this accepts the format without the
+     * "remind me to" prefix (see parseReminderInput's requirePrefix note).
+     * Returns false so the caller can explain the expected format instead
+     * of silently doing nothing when it doesn't parse.
+     */
+    function tryHandleGuidedReminder(text) {
+        const parsed = parseReminderInput(text, false);
+        if (!parsed) return false;
+        commitReminder(parsed);
         return true;
     }
 
@@ -2139,7 +2320,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (openLearnBtn) {
         openLearnBtn.addEventListener('click', () => {
             closeMobileSidebarDrawer();
-            awaitingLearningTopic = true;
+            pendingGuidedAction = 'learning';
             appendBotMessageTracked("What would you like to learn? Type any topic and I'll find real resources for it 📚");
             userInput.focus();
         });
