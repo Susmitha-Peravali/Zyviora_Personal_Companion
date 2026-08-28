@@ -1010,6 +1010,85 @@ padding: 0;
     margin-top: 10px;
 }
 
+/* Guided breathing exercise (Baymax-style wellness tool) */
+.breathing-circle-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 10px 12px;
+    gap: 14px;
+}
+
+.breathing-circle {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.9), var(--primary-color) 70%);
+    box-shadow: 0 0 30px rgba(106, 0, 255, 0.3);
+    transform: scale(0.6);
+    /* The phase durations (4s) are set in JS alongside the class swap that
+       triggers this transition, so the visual pace and the text cues
+       ("Breathe in...", "Hold...") always stay in sync. */
+    transition: transform 4s ease-in-out, box-shadow 4s ease-in-out;
+}
+
+.breathing-circle.inhale {
+    transform: scale(1.3);
+    box-shadow: 0 0 55px rgba(106, 0, 255, 0.55);
+}
+
+.breathing-circle.hold {
+    transform: scale(1.3);
+    box-shadow: 0 0 55px rgba(106, 0, 255, 0.55);
+}
+
+.breathing-circle.exhale {
+    transform: scale(0.6);
+    box-shadow: 0 0 20px rgba(106, 0, 255, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .breathing-circle {
+        transition: opacity 0.3s;
+    }
+}
+
+.breathing-text {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--primary-color);
+    min-height: 1.4em;
+    text-align: center;
+}
+
+.breathing-progress {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.breathing-skip-btn {
+    margin-top: 2px;
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: var(--text-secondary);
+    padding: 6px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    transition: background 0.2s;
+}
+
+.breathing-skip-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.breathing-skip-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* Wordle grid */
 .wordle-grid {
     display: flex;

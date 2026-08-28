@@ -53,6 +53,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let usedCheckInIndices = [];
     let isUserTyping = false;
     let typingTimeout = null;
+    // These three were declared down in the "PROACTIVE CHECK-IN SYSTEM"
+    // section, but resetIdleTimer() -> scheduleNextCheckIn() (which needs
+    // them) runs from handleUserMessage() on every message send — reachable
+    // the instant a user types something, well before the script has
+    // finished its first synchronous pass. Same trap as above: silently
+    // aborted handleUserMessage() entirely (not just the idle timer) for
+    // anyone fast enough to send a message right after page load. Found by
+    // the same class of bug hitting REMINDER_STORAGE_KEY below, where a
+    // try/catch happened to swallow the ReferenceError instead of
+    // surfacing it — this one had no such catch.
+    const MIN_IDLE_MS = 2 * 60 * 1000; // 2 minutes minimum idle
+    const MAX_IDLE_MS = 5 * 60 * 1000; // 5 minutes maximum idle
+    const MAX_CHECKINS_PER_SESSION = 2;  // Hard cap to avoid annoyance
+    // Likewise: getStatusBriefing() (called synchronously from
+    // bootZyviora(), itself called during the script's first pass) reads
+    // this via loadReminders() — declared up here for the same reason.
+    const REMINDER_STORAGE_KEY = 'zyviora_reminders';
 
     // =========================================================
     // MODULE 0: MEMORY SYSTEM (localStorage-persisted)
@@ -390,9 +407,239 @@ document.addEventListener('DOMContentLoaded', () => {
         const negCount = recent.filter(e => ['sad','low'].includes(e.mood)).length;
         const posCount = recent.filter(e => ['great','good'].includes(e.mood)).length;
 
-        if (negCount >= 3) return "I've noticed you've been feeling a bit down lately. That's completely okay — but please know you can always talk to me about it. 💙";
-        if (posCount >= 4) return "You've been in such a great mood recently! That makes me really happy. Keep it up! 🌟";
+        // negative: true routes the caller to an actionable care
+        // recommendation (see showCareRecommendation) instead of a passive
+        // observation that names the problem and then goes nowhere.
+        if (negCount >= 3) return { negative: true, text: "I've noticed you've been feeling a bit down lately. That's completely okay — but please know you can always talk to me about it. 💙" };
+        if (posCount >= 4) return { negative: false, text: "You've been in such a great mood recently! That makes me really happy. Keep it up! 🌟" };
         return null;
+    }
+
+    // =========================================================
+    // MODULE 3B: PROACTIVE CARE (Baymax-style wellbeing check-ins)
+    // Distinct from the severe CRISIS_KEYWORDS safety net (Layer 2 in
+    // handleUserMessage, which hijacks the whole response with hotline
+    // info) — this catches everyday stress language during normal
+    // conversation, lets the AI reply as usual, and layers a caring,
+    // actionable follow-up on top shortly after. Rate-limited so it
+    // doesn't repeat on every message that happens to mention "tired".
+    // =========================================================
+    const EVERYDAY_DISTRESS_KEYWORDS = [
+        'stressed', 'stressed out', 'so anxious', 'anxious', 'anxiety',
+        'overwhelmed', 'exhausted', 'burnt out', 'burned out',
+        "can't sleep", 'cant sleep', 'panic attack', 'panicking',
+        'rough day', 'terrible day', 'awful day', 'bad day', 'i feel awful',
+        'feeling awful', 'so much pressure', "can't cope", 'cant cope'
+    ];
+    const DISTRESS_CHECKIN_COOLDOWN_MS = 20 * 60 * 1000; // 20 minutes
+
+    function tryHandleEverydayDistress(text) {
+        const lower = text.toLowerCase();
+        if (!EVERYDAY_DISTRESS_KEYWORDS.some(kw => lower.includes(kw))) return;
+
+        const lastTs = getMemory('lastDistressCheckInTs') || 0;
+        if (Date.now() - lastTs < DISTRESS_CHECKIN_COOLDOWN_MS) return; // don't pile on
+
+        saveMemory({ lastDistressCheckInTs: Date.now() });
+        // Let the normal AI reply land first, then layer the proactive care
+        // on top rather than competing with it for the same moment.
+        setTimeout(() => showCareRecommendation('distress'), 2200);
+    }
+
+    /**
+     * A Baymax-style caring follow-up with concrete next steps, rather than
+     * just naming the problem and going nowhere. Reused both for
+     * in-conversation distress language and for a declining mood trend
+     * detected on boot.
+     */
+    function showCareRecommendation(reason) {
+        const openers = {
+            distress: "I noticed that sounded like a lot to carry. 💙 I'm here — want to do one of these?",
+            trend: "I've noticed you've been feeling a bit down lately. That's completely okay — but let's do something about it together. 💙"
+        };
+
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+
+        const question = document.createElement('p');
+        question.textContent = openers[reason] || openers.distress;
+        bubble.appendChild(question);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;';
+
+        const options = [
+            { label: "Let's talk about it 💬", action: () => {
+                bubble.querySelectorAll('button').forEach(b => b.disabled = true);
+                appendBotMessageTracked("I'm listening — go ahead, tell me what's going on. Take your time.");
+            }},
+            { label: 'Try a breathing exercise 🌬️', action: () => {
+                bubble.querySelectorAll('button').forEach(b => b.disabled = true);
+                startBreathingExercise();
+            }},
+            { label: "I'm okay, just needed to vent 👍", action: () => {
+                bubble.querySelectorAll('button').forEach(b => b.disabled = true);
+                appendBotMessageTracked("I'm glad you told me anyway — that matters. I'm always here if that changes. 💙");
+            }}
+        ];
+
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.textContent = opt.label;
+            btn.style.cssText = 'padding:8px 16px;border-radius:20px;border:1px solid rgba(0,0,0,0.1);background:rgba(255,255,255,0.9);color:#1a1a2e;cursor:pointer;font-size:0.85rem;font-weight:600;box-shadow:0 4px 10px rgba(0,0,0,0.05);transition:transform 0.2s;';
+            btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
+            btn.onmouseout = () => btn.style.transform = 'scale(1)';
+            btn.addEventListener('click', opt.action);
+            btnRow.appendChild(btn);
+        });
+
+        bubble.appendChild(btnRow);
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        lastBotMessageTime = Date.now();
+    }
+
+    /**
+     * Guided breathing exercise: a Baymax-style calming tool, not a game —
+     * no win/lose, just a slow inhale/hold/exhale cycle with a visual
+     * pace-setter, since "just calm down" rarely works but something to
+     * actually follow along with does.
+     */
+    function startBreathingExercise() {
+        const TOTAL_CYCLES = 4;
+        const PHASES = [
+            { name: 'inhale', label: 'Breathe in...', ms: 4000 },
+            { name: 'hold',   label: 'Hold...',        ms: 4000 },
+            { name: 'exhale', label: 'Breathe out...', ms: 4000 }
+        ];
+
+        const container = document.createElement('div');
+        container.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+        bubble.innerHTML = `
+            <p style="font-weight:600;margin-bottom:4px;color:#1a1a2e;">🌬️ Let's breathe together</p>
+            <div class="breathing-circle-wrap">
+                <div class="breathing-progress" id="breath-progress">Cycle 1 of ${TOTAL_CYCLES}</div>
+                <div class="breathing-circle" id="breath-circle"></div>
+                <div class="breathing-text" id="breath-text">Get comfortable...</div>
+                <button class="breathing-skip-btn" id="breath-skip">I'm done, thanks</button>
+            </div>
+        `;
+        container.appendChild(avatar);
+        container.appendChild(bubble);
+        chatWindow.appendChild(container);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        const circle = bubble.querySelector('#breath-circle');
+        const textEl = bubble.querySelector('#breath-text');
+        const progressEl = bubble.querySelector('#breath-progress');
+        const skipBtn = bubble.querySelector('#breath-skip');
+
+        let cycle = 0, phaseIdx = 0, stepTimer = null, stopped = false;
+
+        function finish(early) {
+            stopped = true;
+            if (stepTimer) clearTimeout(stepTimer);
+            skipBtn.disabled = true;
+            textEl.textContent = early ? 'No worries — take care of yourself. 💙' : 'Well done! 🌟';
+            setTimeout(() => appendBotMessageTracked(
+                early
+                    ? "That's okay, even a few breaths help. I'm still here whenever you need me. 💙"
+                    : "Great job sticking with that! I hope that helped even a little. How are you feeling now? 💙"
+            ), 600);
+        }
+
+        skipBtn.addEventListener('click', () => finish(true));
+
+        function step() {
+            if (stopped) return;
+            if (cycle >= TOTAL_CYCLES) { finish(false); return; }
+
+            const phase = PHASES[phaseIdx];
+            circle.className = 'breathing-circle ' + phase.name;
+            textEl.textContent = phase.label;
+            progressEl.textContent = `Cycle ${cycle + 1} of ${TOTAL_CYCLES}`;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+
+            stepTimer = setTimeout(() => {
+                phaseIdx++;
+                if (phaseIdx >= PHASES.length) {
+                    phaseIdx = 0;
+                    cycle++;
+                }
+                step();
+            }, phase.ms);
+        }
+
+        setTimeout(step, 800);
+        lastBotMessageTime = Date.now();
+    }
+
+    // =========================================================
+    // MODULE 3C: PROACTIVE STATUS BRIEFING (Jarvis-style)
+    // Surfaces what actually matters right now when you open chat, instead
+    // of making you go check the dashboard for it. Gated to once per day
+    // (like the mood check) so it's a useful heads-up, not a nag.
+    // =========================================================
+    function shouldShowDailyBriefing() {
+        return getMemory('lastBriefingDate') !== new Date().toDateString();
+    }
+
+    function getStatusBriefing() {
+        const pendingTasks = loadTasks().filter(t => t.status === 'pending');
+        const reminders = loadReminders();
+        const parts = [];
+        if (pendingTasks.length > 0) {
+            parts.push(`${pendingTasks.length} pending task${pendingTasks.length === 1 ? '' : 's'}`);
+        }
+        if (reminders.length > 0) {
+            parts.push(`${reminders.length} active reminder${reminders.length === 1 ? '' : 's'}`);
+        }
+        if (parts.length === 0) return null; // nothing to report — stay quiet
+
+        let msg = `📋 Quick briefing: you have ${parts.join(' and ')}.`;
+        if (reminders.length > 0) {
+            const nearest = reminders.reduce((a, b) => a.triggerAt < b.triggerAt ? a : b);
+            const mins = Math.round((nearest.triggerAt - Date.now()) / 60000);
+            if (mins > 0 && mins < 180) {
+                msg += ` Next up: "${nearest.task}" in about ${mins} minute${mins === 1 ? '' : 's'}.`;
+            }
+        }
+        return msg;
+    }
+
+    /**
+     * If the most recent mood log entry is from a prior day (not today) and
+     * was low/sad, and we haven't already followed up on it today, this is
+     * Baymax's "I will not stop caring" trait: check back in rather than
+     * asking the exact same daily-mood question again as if nothing had
+     * been said.
+     */
+    function getYesterdaysLowFollowUp() {
+        const log = loadMoodLog();
+        if (log.length === 0) return null;
+        const last = log[log.length - 1];
+        const today = new Date().toDateString();
+        if (last.date === today) return null; // already logged today
+        if (!['low', 'sad'].includes(last.mood)) return null;
+
+        const lastFollowUpDate = getMemory('lastMoodFollowUpDate');
+        if (lastFollowUpDate === today) return null; // already followed up today
+
+        return last;
     }
 
     // =========================================================
@@ -517,6 +764,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             `Suggestion for tomorrow: Keep taking it one step at a time! I'm proud of you. 🌟`;
                             
             appendBotMessageTracked(message);
+            return true;
+        }
+        return false;
+    }
+
+    // =========================================================
+    // MODULE 7.6: WELLNESS — direct request for the breathing exercise
+    // (the same tool showCareRecommendation's button leads to, but
+    // reachable without waiting for Zyviora to notice something first)
+    // =========================================================
+    function tryHandleWellnessRequest(text) {
+        if (/(?:breathing exercise|help me (?:relax|breathe|calm down)|calm me down|calm down|need to relax|de-?stress me?)/i.test(text)) {
+            appendBotMessageTracked("Of course — let's slow things down together. 💙");
+            setTimeout(() => startBreathingExercise(), 500);
             return true;
         }
         return false;
@@ -733,6 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tryHandleGoal(text))        return;
         if (tryHandleFunRequest(text))  return;
         if (tryHandleDailyReport(text)) return;
+        if (tryHandleWellnessRequest(text)) return;
 
         // --- Layer 2: Safe Emotional Support (crisis detection) ---
         if (checkForCrisisSignals(text)) return;
@@ -740,6 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Layer 3: Personality — silently learn user's name & gather insights ---
         tryLearnName(text);
         tryHandleLearningInsights(text);
+        tryHandleEverydayDistress(text);
 
         // Disable input while waiting for backend
         userInput.disabled = true;
@@ -823,8 +1086,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     function bootZyviora() {
         renderSidebarHistory();
-        
+
         const sessions = loadChatSessions();
+        const today = new Date().toDateString();
+
+        // Baymax's "I will not stop caring" trait: if last time we talked
+        // you were low, check back in rather than asking the identical
+        // daily-mood question again as if nothing had been said. This (and
+        // the briefing/insight below) is gated purely by DATE, not by
+        // whether the current session happens to already have messages in
+        // it — a returning user's active session almost always still has
+        // old messages from days ago, so history-gating these would mean
+        // they silently never fire for the single most common case:
+        // someone reopening the app after time away, exactly who Baymax
+        // and Jarvis are supposed to proactively greet in the first place.
+        const lowFollowUp = getYesterdaysLowFollowUp();
+        const followUpAlreadyShownToday = getMemory('lastMoodFollowUpDate') === today;
+        let suppressMoodPicker = false;
+
         if (sessions.length === 0 || !activeSessionId) {
             // First time ever, or no active session selected: create new
             startNewChat();
@@ -833,24 +1112,64 @@ document.addEventListener('DOMContentLoaded', () => {
             const hasHistory = restoreChatHistory();
             updateChatHeader();
             if (!hasHistory) {
-                const ctx = getTimeContext();
-                setTimeout(() => appendBotMessageTracked(timeGreetings[ctx], true), 600);
+                if (lowFollowUp && !followUpAlreadyShownToday) {
+                    saveMemory({ lastMoodFollowUpDate: today });
+                    suppressMoodPicker = true;
+                    setTimeout(() => appendBotMessageTracked(
+                        "Hey — last time we talked, you mentioned feeling a bit low. I've been thinking about you. How are you doing today? 💙", true
+                    ), 600);
+                } else {
+                    const ctx = getTimeContext();
+                    setTimeout(() => appendBotMessageTracked(timeGreetings[ctx], true), 600);
+                }
+            } else if (lowFollowUp && !followUpAlreadyShownToday) {
+                // Returning to an ongoing conversation from a prior day —
+                // there's no greeting to fold this into, so it's its own
+                // gentle nudge instead.
+                saveMemory({ lastMoodFollowUpDate: today });
+                suppressMoodPicker = true;
+                setTimeout(() => appendBotMessageTracked(
+                    "Before we continue — last time we talked, you mentioned feeling a bit low. How are you doing today? 💙", true
+                ), 900);
             }
         }
-        
-        // For insights logic below, consider it hasHistory if there are messages
+
         const activeSession = loadChatSessions().find(s => s.id === activeSessionId);
         const hasHistory = activeSession && activeSession.messages.length > 0;
+        const justShowedLowFollowUp = lowFollowUp && !followUpAlreadyShownToday;
 
-        // 2. Personal Insights (mood trend) — show if enough data
-        const insight = getMoodInsight();
-        if (insight && !hasHistory) {
-            setTimeout(() => appendBotMessageTracked(insight, true), 1600);
+        // 1.5 Proactive Status Briefing (Jarvis-style) — what needs
+        // attention right now, surfaced without being asked, once per day
+        // regardless of whether this session is brand new or weeks old.
+        // Skipped alongside the mood-trend insight when we already led
+        // with the more personal "you were low" follow-up above — someone
+        // who just said they're feeling low doesn't need a task list too.
+        if (!justShowedLowFollowUp && shouldShowDailyBriefing()) {
+            const briefing = getStatusBriefing();
+            if (briefing) {
+                saveMemory({ lastBriefingDate: today });
+                setTimeout(() => appendBotMessageTracked(briefing, true), hasHistory ? 1400 : 1150);
+            }
         }
 
-        // 3. Daily Mood Check — show once per day
-        if (shouldAskDailyMood()) {
-            setTimeout(() => showMoodPicker(), (insight && !hasHistory) ? 2600 : 1400);
+        // 2. Personal Insights (mood trend) — once per day, same reasoning
+        // as the briefing above: gated by date, not by session content.
+        const insight = getMoodInsight();
+        const insightAlreadyShownToday = getMemory('lastInsightShownDate') === today;
+        if (insight && !justShowedLowFollowUp && !insightAlreadyShownToday) {
+            saveMemory({ lastInsightShownDate: today });
+            const delay = hasHistory ? 1700 : 1900;
+            if (insight.negative) {
+                setTimeout(() => showCareRecommendation('trend'), delay);
+            } else {
+                setTimeout(() => appendBotMessageTracked(insight.text, true), delay);
+            }
+        }
+
+        // 3. Daily Mood Check — show once per day (skipped if we already
+        // asked via the warmer "how are you doing today" follow-up above)
+        if (shouldAskDailyMood() && !suppressMoodPicker) {
+            setTimeout(() => showMoodPicker(), (insight && !hasHistory) ? 2900 : 1500);
         }
     }
 
@@ -987,8 +1306,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================
     // MODULE 1: SMART REMINDER ENGINE (localStorage-persisted)
     // =========================================================
-    const REMINDER_STORAGE_KEY = 'zyviora_reminders';
-
     /**
      * Parse a natural language reminder string.
      * Supports:
@@ -1129,9 +1446,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===========================================================
     // MODULE 2: PROACTIVE CHECK-IN SYSTEM (Idle Timer)
     // ===========================================================
-    const MIN_IDLE_MS = 2 * 60 * 1000; // 2 minutes minimum idle
-    const MAX_IDLE_MS = 5 * 60 * 1000; // 5 minutes maximum idle
-    const MAX_CHECKINS_PER_SESSION = 2;  // Hard cap to avoid annoyance
+    // (MIN_IDLE_MS, MAX_IDLE_MS, MAX_CHECKINS_PER_SESSION declared near the
+    // top of this closure — see comment there)
 
     // 5 distinct, human-like, non-repetitive check-in messages
     const checkInMessages = [
