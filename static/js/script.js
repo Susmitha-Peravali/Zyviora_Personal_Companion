@@ -990,7 +990,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function extractLearningTopic(text) {
-        const patterns = [
+        // Verb-first phrasings ("teach me X") capture the topic as
+        // everything AFTER the trigger phrase.
+        const verbFirstPatterns = [
             /^teach me(?: about)?\s+(.+)/i,
             /^i want to learn(?: about)?\s+(.+)/i,
             /^how (?:do|can) i learn\s+(.+)/i,
@@ -1000,8 +1002,26 @@ document.addEventListener('DOMContentLoaded', () => {
             /^where can i learn\s+(.+)/i,
             /^how to learn\s+(.+)/i,
             /^find (?:me )?(?:some )?(?:videos|tutorials) (?:for|on|about)\s+(.+)/i,
+            /^(?:show|find|get) me\s+(.+?)\s+(?:videos|tutorials)$/i,
         ];
-        for (const re of patterns) {
+        for (const re of verbFirstPatterns) {
+            const m = text.match(re);
+            if (m && m[1]) {
+                const topic = m[1].trim().replace(/[?.!]+$/, '');
+                if (topic.length > 0 && topic.length <= 200) return topic;
+            }
+        }
+
+        // Topic-first phrasings ("guitar on youtube", "python tutorial") —
+        // just as natural a way to ask, especially as a quick follow-up to
+        // an earlier request, but structurally the reverse of the above:
+        // the topic comes BEFORE the trigger phrase, not after.
+        const topicFirstPatterns = [
+            /^(.+?)\s+on youtube$/i,
+            /^(.+?)\s+tutorials?$/i,
+            /^(.+?)\s+videos? on youtube$/i,
+        ];
+        for (const re of topicFirstPatterns) {
             const m = text.match(re);
             if (m && m[1]) {
                 const topic = m[1].trim().replace(/[?.!]+$/, '');
