@@ -18,6 +18,7 @@ import subprocess
 import webbrowser
 from email.message import EmailMessage
 import html
+import json
 import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -709,6 +710,68 @@ def learning_resources():
     except requests.RequestException as e:
         logger.warning("YouTube API request failed: %s", e)
         return jsonify({'status': 'error', 'message': 'Could not reach the resource search right now.'}), 502
+
+@app.route('/api/skill-path', methods=['POST'])
+@limiter.limit("10 per minute")
+def skill_path():
+    """Generate a structured, ordered curriculum for a topic via Gemini —
+    deliberately just a sequence of step titles + a search query per step,
+    NOT specific videos/resources (see /api/learning-resources for why an
+    LLM shouldn't be trusted to name those). Breaking a skill into an
+    ordered learning sequence is something an LLM is actually reliable at;
+    each step's real resource is fetched separately, lazily, only when the
+    user opens that step."""
+    data = request.get_json(silent=True) or {}
+    topic = (data.get('topic') or '').strip()
+    if not topic:
+        return jsonify({'status': 'error', 'message': 'Topic is required'}), 400
+    if len(topic) > 200:
+        return jsonify({'status': 'error', 'message': 'Topic is too long'}), 400
+
+    if not (GEMINI_API_KEY and GEMINI_API_KEY != "INSERT_YOUR_API_KEY_HERE"):
+        return jsonify({'status': 'unconfigured'})
+
+    try:
+        prompt = (
+            f"Break down learning \"{topic}\" into exactly 5 ordered, "
+            f"beginner-friendly steps, progressing from fundamentals to a "
+            f"small practical milestone.\n"
+            f"Respond with ONLY a JSON array, no other text, no markdown "
+            f"code fences. Each element must be an object with exactly two "
+            f"string fields: \"title\" (max 8 words, the step name) and "
+            f"\"search_query\" (a good, specific YouTube search phrase for "
+            f"a video covering that step)."
+        )
+        model = genai.GenerativeModel('gemini-flash-lite-latest')
+        llm_response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(max_output_tokens=500)
+        )
+        raw = (llm_response.text or '').strip()
+        # The prompt asks for no code fences, but models add them anyway
+        # often enough that stripping defensively is worth it.
+        raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw).strip()
+        parsed = json.loads(raw)
+
+        if not isinstance(parsed, list):
+            raise ValueError("Model did not return a JSON array")
+
+        steps = []
+        for item in parsed[:8]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get('title', '')).strip()[:100]
+            query = str(item.get('search_query', '')).strip()[:200]
+            if title and query:
+                steps.append({'title': title, 'search_query': query})
+
+        if not steps:
+            raise ValueError("No valid steps after sanitizing model output")
+
+        return jsonify({'status': 'success', 'topic': topic, 'steps': steps})
+    except Exception as e:
+        logger.warning("Skill path generation failed for topic %r: %s", topic, e)
+        return jsonify({'status': 'error', 'message': 'Could not generate a skill path right now.'}), 502
 
 @app.route('/open-app', methods=['POST'])
 @api_login_required

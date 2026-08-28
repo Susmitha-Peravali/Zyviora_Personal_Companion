@@ -1029,8 +1029,271 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </a>`;
         });
-        html += '</div><p style="margin-top:10px;font-size:0.78rem;color:#6b7280;">Want more on this, or a different topic?</p>';
+        html += '</div>';
         bubble.innerHTML = html;
+
+        // Offer to turn this into a structured, trackable Skill Path
+        // rather than a one-off video list — the confidence-building part
+        // of "help people learn things" needs visible progress, not just
+        // a link.
+        const offerRow = document.createElement('div');
+        offerRow.style.cssText = 'margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+        const offerText = document.createElement('span');
+        offerText.style.cssText = 'font-size:0.78rem;color:#6b7280;';
+        offerText.textContent = 'Want a structured path to actually learn this?';
+        const offerBtn = document.createElement('button');
+        offerBtn.textContent = '🎯 Turn this into a Skill Path';
+        offerBtn.style.cssText = 'padding:6px 14px;border-radius:16px;border:1px solid rgba(106,0,255,0.2);background:rgba(106,0,255,0.08);color:var(--primary-color);cursor:pointer;font-size:0.78rem;font-weight:600;';
+        offerBtn.addEventListener('click', () => {
+            offerRow.remove();
+            startSkillPath(topic);
+        });
+        offerRow.appendChild(offerText);
+        offerRow.appendChild(offerBtn);
+        bubble.appendChild(offerRow);
+    }
+
+    // =========================================================
+    // MODULE 11: SKILL PATHS (structured, trackable learning journeys)
+    // A curated resource list answers "show me something" — this answers
+    // "help me actually get good at this": an ordered sequence of steps
+    // (from Gemini, which is reliable at structuring a curriculum) with a
+    // real resource per step (from the YouTube search above, fetched
+    // lazily per step rather than all 5 upfront) and visible progress.
+    // =========================================================
+    const SKILL_PATHS_KEY = 'zyviora_skill_paths';
+
+    function loadSkillPaths() {
+        try { return JSON.parse(localStorage.getItem(SKILL_PATHS_KEY)) || []; }
+        catch { return []; }
+    }
+
+    function saveSkillPaths(paths) {
+        localStorage.setItem(SKILL_PATHS_KEY, JSON.stringify(paths));
+    }
+
+    function startSkillPath(topic) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar thinking';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+        bubble.innerHTML = `<p>🎯 Building a learning path for "${escapeHtml(topic)}"...</p><div class="typing-dots"><span></span><span></span><span></span></div>`;
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        fetch('/api/skill-path', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ topic })
+        })
+        .then(r => r.json())
+        .then(data => {
+            avatar.classList.remove('thinking');
+            if (data.status === 'success' && data.steps && data.steps.length > 0) {
+                const path = {
+                    id: 'path_' + Date.now(),
+                    topic,
+                    createdAt: Date.now(),
+                    steps: data.steps.map(s => ({
+                        title: s.title,
+                        searchQuery: s.search_query,
+                        completed: false,
+                        resource: null // fetched lazily when the step is opened
+                    }))
+                };
+                const paths = loadSkillPaths();
+                paths.push(path);
+                saveSkillPaths(paths);
+                renderSkillPathChecklist(bubble, path.id);
+                addMessageToHistory(bubble.innerHTML, 'bot', true);
+            } else if (data.status === 'unconfigured') {
+                bubble.innerHTML = `I'd love to build you a full path, but that needs my AI connection configured, which isn't set up yet. The video list above is still a solid start though! 💙`;
+                addMessageToHistory(bubble.innerHTML, 'bot', true);
+            } else {
+                bubble.innerHTML = `I couldn't put a learning path together right now. Want to try again in a moment?`;
+                addMessageToHistory(bubble.innerHTML, 'bot', true);
+            }
+            lastBotMessageTime = Date.now();
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        })
+        .catch(() => {
+            avatar.classList.remove('thinking');
+            bubble.innerHTML = `I couldn't reach my planning brain right now. Please try again in a moment.`;
+            addMessageToHistory(bubble.innerHTML, 'bot', true);
+        });
+    }
+
+    /**
+     * Renders the checklist UI for a skill path into an existing bubble.
+     * Re-callable (e.g. after marking a step complete) since it always
+     * re-reads the current path state from storage rather than trusting a
+     * stale closure over the steps array.
+     */
+    function renderSkillPathChecklist(bubble, pathId) {
+        const paths = loadSkillPaths();
+        const path = paths.find(p => p.id === pathId);
+        if (!path) return;
+
+        const doneCount = path.steps.filter(s => s.completed).length;
+        const pct = Math.round((doneCount / path.steps.length) * 100);
+
+        let html = `<p style="font-weight:600;margin-bottom:4px;color:#1a1a2e;">🎯 ${escapeHtml(path.topic)}</p>`;
+        html += `<div style="height:6px;background:rgba(0,0,0,0.08);border-radius:3px;margin-bottom:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--primary-gradient);transition:width 0.4s;"></div></div>`;
+        html += `<p style="font-size:0.75rem;color:#6b7280;margin-bottom:10px;">${doneCount} of ${path.steps.length} steps complete</p>`;
+        html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+
+        path.steps.forEach((step, i) => {
+            const checkColor = step.completed ? '#00b894' : 'rgba(0,0,0,0.2)';
+            html += `
+                <div class="skill-step" data-step-index="${i}" style="border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,0.55);">
+                    <div class="skill-step-header" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                        <span class="material-icons" style="color:${checkColor};font-size:20px;">${step.completed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                        <span style="flex:1;min-width:0;font-size:0.88rem;font-weight:600;color:#1a1a2e;${step.completed ? 'text-decoration:line-through;opacity:0.65;' : ''}">${i + 1}. ${escapeHtml(step.title)}</span>
+                        <span class="material-icons skill-step-chevron" style="font-size:18px;color:#6b7280;">expand_more</span>
+                    </div>
+                    <div class="skill-step-body" style="display:none;margin-top:8px;padding-left:30px;"></div>
+                </div>`;
+        });
+        html += '</div>';
+        bubble.innerHTML = html;
+
+        bubble.querySelectorAll('.skill-step').forEach(stepEl => {
+            const idx = parseInt(stepEl.getAttribute('data-step-index'), 10);
+            const header = stepEl.querySelector('.skill-step-header');
+            const body = stepEl.querySelector('.skill-step-body');
+            const chevron = stepEl.querySelector('.skill-step-chevron');
+
+            header.addEventListener('click', () => {
+                const isOpen = body.style.display !== 'none';
+                if (isOpen) {
+                    body.style.display = 'none';
+                    chevron.textContent = 'expand_more';
+                    return;
+                }
+                body.style.display = 'block';
+                chevron.textContent = 'expand_less';
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                loadOrShowStepResource(bubble, pathId, idx, body);
+            });
+        });
+    }
+
+    function loadOrShowStepResource(bubble, pathId, stepIndex, bodyEl) {
+        const paths = loadSkillPaths();
+        const path = paths.find(p => p.id === pathId);
+        if (!path) return;
+        const step = path.steps[stepIndex];
+
+        function renderStepBody() {
+            const resourceHtml = step.resource
+                ? `<a href="${escapeHtml(step.resource.url)}" target="_blank" rel="noopener noreferrer" style="display:flex;gap:8px;text-decoration:none;color:inherit;background:rgba(255,255,255,0.7);border-radius:10px;padding:6px;">
+                        ${step.resource.thumbnail ? `<img src="${escapeHtml(step.resource.thumbnail)}" alt="" style="width:80px;height:45px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : ''}
+                        <div style="min-width:0;"><div style="font-size:0.8rem;font-weight:600;color:#1a1a2e;">${escapeHtml(step.resource.title)}</div><div style="font-size:0.72rem;color:#6b7280;">${escapeHtml(step.resource.channel)}</div></div>
+                   </a>`
+                : '<p style="font-size:0.8rem;color:#6b7280;">No video found for this step — try searching it directly.</p>';
+
+            const completeLabel = step.completed ? '↺ Mark as not done' : '✓ Mark step complete';
+            bodyEl.innerHTML = `${resourceHtml}<button class="skill-step-toggle" style="margin-top:8px;padding:5px 12px;border-radius:14px;border:1px solid rgba(0,0,0,0.1);background:transparent;color:#1a1a2e;cursor:pointer;font-size:0.76rem;">${completeLabel}</button>`;
+            bodyEl.querySelector('.skill-step-toggle').addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleSkillStep(pathId, stepIndex);
+                renderSkillPathChecklist(bubble, pathId);
+                addMessageToHistory(bubble.innerHTML, 'bot', true);
+            });
+        }
+
+        if (step.resource !== null) {
+            renderStepBody();
+            return;
+        }
+
+        bodyEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+        fetch('/api/learning-resources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+            body: JSON.stringify({ topic: step.searchQuery })
+        })
+        .then(r => r.json())
+        .then(data => {
+            const freshPaths = loadSkillPaths();
+            const freshPath = freshPaths.find(p => p.id === pathId);
+            if (!freshPath) return;
+            const freshStep = freshPath.steps[stepIndex];
+            freshStep.resource = (data.status === 'success' && data.videos && data.videos[0]) ? data.videos[0] : { url: `https://www.youtube.com/results?search_query=${encodeURIComponent(step.searchQuery)}`, title: 'Search on YouTube', channel: '', thumbnail: '' };
+            saveSkillPaths(freshPaths);
+            step.resource = freshStep.resource;
+            renderStepBody();
+        })
+        .catch(() => {
+            bodyEl.innerHTML = '<p style="font-size:0.8rem;color:#6b7280;">Couldn\'t load a resource for this step right now.</p>';
+        });
+    }
+
+    function tryHandleSkillPathList(text) {
+        const trimmed = text.trim();
+        const skillPathPatterns = [
+            /^(?:show|list|view|see)\s+my\s+(?:skill paths|learning paths|skills)\b/i,
+            /^(?:show|list|view|see)\s+(?:skill paths|learning paths|skills)\b/i,
+            /^my\s+(?:skill paths|learning paths)\b/i,
+        ];
+        if (!skillPathPatterns.some(re => re.test(trimmed))) return false;
+
+        const paths = loadSkillPaths();
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message bot-message';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar bot-avatar';
+        avatar.innerHTML = '<img src="/static/bot_avatar.png" alt="Zyviora" />';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble glass-panel';
+
+        if (paths.length === 0) {
+            bubble.innerHTML = `You don't have any skill paths yet — try "I want to learn [something]" and I'll offer to build one! 🎯`;
+        } else {
+            let listHtml = '<p style="font-weight:600;margin-bottom:8px;">🎯 Your skill paths:</p><div style="display:flex;flex-direction:column;gap:6px;">';
+            paths.forEach(p => {
+                const done = p.steps.filter(s => s.completed).length;
+                listHtml += `<button class="skill-path-open" data-path-id="${p.id}" style="text-align:left;padding:8px 12px;border-radius:10px;border:1px solid rgba(0,0,0,0.08);background:rgba(255,255,255,0.6);cursor:pointer;font-size:0.85rem;color:#1a1a2e;">${escapeHtml(p.topic)} — ${done}/${p.steps.length} steps</button>`;
+            });
+            listHtml += '</div>';
+            bubble.innerHTML = listHtml;
+        }
+
+        msgDiv.appendChild(avatar);
+        msgDiv.appendChild(bubble);
+        chatWindow.appendChild(msgDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+
+        bubble.querySelectorAll('.skill-path-open').forEach(btn => {
+            btn.addEventListener('click', () => {
+                renderSkillPathChecklist(bubble, btn.getAttribute('data-path-id'));
+                addMessageToHistory(bubble.innerHTML, 'bot', true);
+            });
+        });
+
+        addMessageToHistory(bubble.innerHTML, 'bot', true);
+        lastBotMessageTime = Date.now();
+        return true;
+    }
+
+    function toggleSkillStep(pathId, stepIndex) {
+        const paths = loadSkillPaths();
+        const path = paths.find(p => p.id === pathId);
+        if (!path) return;
+        const step = path.steps[stepIndex];
+        step.completed = !step.completed;
+        saveSkillPaths(paths);
+        if (step.completed) {
+            const doneCount = path.steps.filter(s => s.completed).length;
+            if (doneCount === path.steps.length) {
+                setTimeout(() => appendBotMessageTracked(`🎉 You completed the entire "${path.topic}" path! That's real progress — I'm proud of you.`), 400);
+            }
+        }
     }
 
     function tryHandleLearningResources(text) {
@@ -1100,6 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tryHandleDailyReport(text)) return;
         if (tryHandleWellnessRequest(text)) return;
         if (tryHandleLearningResources(text)) return;
+        if (tryHandleSkillPathList(text)) return;
 
         // --- Layer 2: Safe Emotional Support (crisis detection) ---
         if (checkForCrisisSignals(text)) return;

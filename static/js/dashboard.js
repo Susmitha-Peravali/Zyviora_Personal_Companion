@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateLearningInsights();
     renderTasksSummary();
     renderRemindersSummary();
+    renderSkillPaths();
 });
 
 function renderGoalsList() {
@@ -283,6 +284,36 @@ function renderTasksSummary() {
             });
         }
     } catch(e) {}
+}
+
+function renderSkillPaths() {
+    const list = document.getElementById('skill-path-list');
+    if (!list) return;
+    try {
+        const paths = JSON.parse(localStorage.getItem('zyviora_skill_paths')) || [];
+        if (paths.length === 0) {
+            list.innerHTML = '<p style="color:var(--text-secondary);font-size:0.95rem;">No skill paths yet.</p>';
+            return;
+        }
+        list.innerHTML = '';
+        paths.forEach(p => {
+            const done = p.steps.filter(s => s.completed).length;
+            const pct = Math.round((done / p.steps.length) * 100);
+            const wrap = document.createElement('div');
+            wrap.innerHTML = `
+                <div style="display:flex;justify-content:space-between;font-size:0.9rem;margin-bottom:4px;">
+                    <span style="font-weight:600;color:var(--text-primary);">${p.topic}</span>
+                    <span style="color:var(--text-secondary);">${done}/${p.steps.length}</span>
+                </div>
+                <div style="height:6px;background:rgba(0,0,0,0.08);border-radius:3px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:linear-gradient(135deg,#a777e3,#6e8efb);"></div>
+                </div>
+            `;
+            list.appendChild(wrap);
+        });
+    } catch (e) {
+        console.error('Error rendering skill paths:', e);
+    }
 }
 
 function renderRemindersSummary() {

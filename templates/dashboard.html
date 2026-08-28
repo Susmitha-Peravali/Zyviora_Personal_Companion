@@ -97,11 +97,19 @@
                     <li>No active reminders.</li>
                 </ul>
             </div>
+
+            <div class="stat-card" id="skill-path-card">
+                <h3>🎯 Skill Paths</h3>
+                <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:6px;">Say "I want to learn [something]" in chat to start one.</p>
+                <div id="skill-path-list" style="display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;">
+                    <p style="color:var(--text-secondary);font-size:0.95rem;">No skill paths yet.</p>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/games.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=6"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=7"></script>
     <script src="{{ url_for('static', filename='js/cursor.js') }}?v=4"></script>
 </body>
 
