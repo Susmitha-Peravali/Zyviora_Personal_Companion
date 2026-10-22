@@ -2,17 +2,7 @@
 
 > A conversational AI assistant that combines deterministic Prolog rules, Google Gemini, and a rich browser-based UI to help you manage tasks, goals, mood, reminders, and learning — all in one place.
 
----
 
-## Screenshots
-
-| Chat Interface | Dashboard |
-|---|---|
-| ![Chat Interface](assets/screenshot_chat.png) | ![Dashboard](assets/screenshot_dashboard.png) |
-
-> 📸 *Take screenshots of your running app and place them in an `assets/` folder in the project root.*
-
----
 
 ## Table of Contents
 
@@ -57,9 +47,9 @@ Everything is accessible through a single chat interface. No commands to memoris
 
 ## Live Demo
 
-🔗 **[your-live-url-here](https://zyviora-personal-companion.onrender.com/)**
+🔗 **[Demo](https://zyviora-personal-companion.onrender.com/)**
 
-> Replace the link above with your actual deployed URL after hosting the app (e.g. on Render, Railway, or any Docker-compatible host).
+
 
 ---
 
@@ -108,9 +98,9 @@ Everything is accessible through a single chat interface. No commands to memoris
 │  │  Layer 3: Personality learning    ← localStorage          │
 │  │  Layer 4: POST /chat              ← Flask backend         │
 │  │                                                           │
-│  dashboard.js ─ reads localStorage, renders charts          │
+│  dashboard.js ─ reads localStorage, renders charts           │
 │  games.js     ─ 5 inline games, stats in localStorage        │
-│  Web Speech API ─ microphone input + TTS output             │
+│  Web Speech API ─ microphone input + TTS output              │
 │  localStorage ─ tasks, goals, reminders, mood, chat history  │
 └──────────────────────────────────────────────────────────────┘
                           │  HTTPS / fetch()
