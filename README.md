@@ -130,16 +130,16 @@ Everything is accessible through a single chat interface. No commands to memoris
 ┌──────────────┐      ┌────────────────────┐   ┌───────────────┐
 │  SQLite /    │      │  SWI-Prolog        │   │  Google       │
 │  PostgreSQL  │      │  (via PySwip)      │   │  Gemini API   │
-│              │      │                   │   │               │
-│  User table  │      │  conversation.pl  │   │  Chat fallback│
-│  (1 model)   │      │  emotion.pl       │   │  Skill paths  │
-│              │      │  productivity.pl  │   │               │
-│  id          │      │  interview.pl     │   └───────────────┘
-│  username    │      │  knowledge.pl     │
-│  password_   │      │  decision_        │         │
-│  hash        │      │  support.pl       │   ┌───────────────┐
-│  email       │      │  wordle_game.pl   │   │ YouTube       │
-│  full_name   │      │                   │   │ Data API v3   │
+│              │      │                    │   │               │
+│  User table  │      │  conversation.pl   │   │  Chat fallback│
+│  (1 model)   │      │  emotion.pl        │   │  Skill paths  │
+│              │      │  productivity.pl   │   │               │
+│  id          │      │  interview.pl      │   └───────────────┘
+│  username    │      │  knowledge.pl      │
+│  password_   │      │  decision_         │         │
+│  hash        │      │  support.pl        │   ┌───────────────┐
+│  email       │      │  wordle_game.pl    │   │ YouTube       │
+│  full_name   │      │                    │   │ Data API v3   │
 │  data (JSON) │      └────────────────────┘   │ (optional)    │
 │  + auth cols │                               └───────────────┘
 └──────────────┘
